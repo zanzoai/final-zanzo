@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "240378671893",
+    "project_id": "zanzo-uk-mvp",
+    "storage_bucket": "zanzo-uk-mvp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:240378671893:android:23b794d7870c3486432f1c",
+        "android_client_info": {
+          "package_name": "com.example.zanzo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBSYiXvTYIvc8ai0zsBin2npLiPodDezcA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

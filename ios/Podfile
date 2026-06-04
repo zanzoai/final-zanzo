@@ -1,0 +1,75 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '14.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks! :linkage => :static
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+  # Force modular headers for Firebase/Google pods so firebase_messaging
+  # can import <Firebase/Firebase.h> as a module (fixes non-modular header error)
+  pod 'Firebase', :modular_headers => true
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'FirebaseMessaging', :modular_headers => true
+  pod 'FirebaseInstallations', :modular_headers => true
+  pod 'FirebaseCoreInternal', :modular_headers => true
+  pod 'GoogleUtilities', :modular_headers => true
+
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    # Flutter's default iOS build settings
+    flutter_additional_ios_build_settings(target)
+
+    # Force ALL pods to iOS 14.0 to avoid deployment target conflicts (Razorpay, SwiftyGif, etc.)
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+    end
+
+  end
+
+  # Fix "Include of non-modular header inside framework module 'firebase_messaging'"
+  # Clang needs a module map at Pods/Headers/Public/Firebase/module.modulemap so that
+  # <Firebase/Firebase.h> is recognized as modular inside the firebase_messaging framework.
+  # The original at CoreOnly/Sources/module.modulemap is blanked to avoid
+  # "Redefinition of module 'Firebase'" (Clang follows Firebase.h symlink to that directory).
+  # We hardcode the content rather than copying to survive subsequent pod installs where
+  # the source file may already be blank.
+  firebase_module_content = "module Firebase {\n  export *\n  header \"Firebase.h\"\n}\n"
+  firebase_public_modulemap = "#{installer.sandbox.root}/Headers/Public/Firebase/module.modulemap"
+  firebase_src_modulemap    = "#{installer.sandbox.root}/Firebase/CoreOnly/Sources/module.modulemap"
+  File.write(firebase_public_modulemap, firebase_module_content)
+  File.write(firebase_src_modulemap, "") if File.exist?(firebase_src_modulemap)
+  puts "Fixed Firebase module.modulemap"
+end

@@ -1,0 +1,96 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.example.zanzo"
+    tools:ignore="MissingApplicationIcon">
+
+    <!-- ✅ Common permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Required for push notifications on Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name="${applicationName}"
+        android:label="Zanzo"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:exported="true"
+        tools:replace="android:allowBackup,android:label,android:exported,android:icon,android:name"
+        tools:node="merge">
+
+        <!-- ✅ Main activity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="
+                orientation|
+                keyboardHidden|
+                keyboard|
+                screenSize|
+                smallestScreenSize|
+                locale|
+                layoutDirection|
+                fontScale|
+                screenLayout|
+                density|
+                uiMode"
+            tools:node="merge">
+
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+            <intent-filter tools:node="merge">
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 🚀 REQUIRED FIX FOR IMAGE_CROPPER PLUGIN -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <!-- FLUTTER -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+        <!-- MLKit + Barcode + Stripe (safe empty) -->
+        <meta-data tools:node="merge"
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="" />
+
+        <meta-data tools:node="merge"
+            android:name="com.google.mlkit.barcode.DEPENDENCIES"
+            android:value="" />
+
+        <meta-data tools:node="merge"
+            android:name="com.stripe.sdk.PROVIDER"
+            android:value="" />
+
+        <!-- Default FCM channel — must match channel created in MainActivity -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="job_alerts" />
+
+    </application>
+
+    <!-- Needed for ProcessTextPlugin -->
+    <queries tools:node="merge">
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+
+</manifest>

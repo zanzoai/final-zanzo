@@ -1,0 +1,4 @@
+#!/bin/bash
+# Wrapper so Gradle can always execute Flutter safely on macOS
+export PATH=$PATH:/Users/developer/flutter/bin
+exec /Users/developer/flutter/bin/flutter "$@"

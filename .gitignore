@@ -1,0 +1,30 @@
+# Flutter/Dart/Pub
+.dart_tool/
+.packages
+.pub-cache/
+build/
+coverage/
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+android/key.properties
+
+# VSCode / IntelliJ
+.vscode/*
+.idea/
+
+# OS
+.DS_Store
+.flutter-plugins-dependencies
+.dart_tool/
+pubspec.lock
