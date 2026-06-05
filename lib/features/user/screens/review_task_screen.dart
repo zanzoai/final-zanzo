@@ -503,11 +503,10 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         : _importantNotes.join(", ");
 
     final jobRes = await http.post(
-      Uri.parse("${ApiService.baseUrl}/jobs"),
+      Uri.parse("${ApiService.baseUrl}/tasks/tasks/"),
       headers: authHeaders,
       body: jsonEncode({
-        "user_id": userId,
-        "task_title": _conciseTitle,
+        "title": _conciseTitle,
         "polished_task": _taskController.text,
 
         // DELIVERY / RETURN ADDRESS
@@ -524,8 +523,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         "scheduled_at": scheduledAtIso,
         "duration_hours": _durationHours,
         "people_required": _peopleCount,
-        "estimated_cost_pence": _toMinorUnits(_estimatedCost, _currencyCode),
-        "important_notes": notesText,
+        "estimated_amount": _estimatedCost,
+        "currency": _currencyCode.toLowerCase(),
+        "notes": notesText,
         "actions": _actions,
         "tags": _tags,
       }),
@@ -536,7 +536,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     }
 
     final jobData = jsonDecode(jobRes.body) as Map<String, dynamic>;
-    final jobId = jobData['job_id']?.toString();
+    final jobId = jobData['id']?.toString();
 
     if (jobId == null) throw Exception("No job_id returned");
     return jobId;
@@ -566,12 +566,12 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       print('🔷 [Stripe] POST create-payment-intent amount=$amountPence currency=${_currencyCode.toLowerCase()} job=$jobId');
 
       final payRes = await http.post(
-        Uri.parse('${ApiService.baseUrl}/create-payment-intent'),
+        Uri.parse('${ApiService.baseUrl}/payments/create-payment-intent'),
         headers: authHeaders,
         body: json.encode({
           'amount': amountPence,
           'currency': _currencyCode.toLowerCase(),
-          'job_id': jobId,
+          'task_id': jobId,
         }),
       );
 
@@ -615,7 +615,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       final authResp = await http.post(
         Uri.parse("${ApiService.baseUrl}/payments/stripe-authorized"),
         headers: authHeaders,
-        body: jsonEncode({"job_id": jobId}),
+        body: jsonEncode({"task_id": jobId}),
       );
       print('🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}');
 
