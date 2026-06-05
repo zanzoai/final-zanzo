@@ -10,9 +10,7 @@ import 'package:zanzo_frontend/core/services/api_service.dart';
 class ZanCrewApi {
   static Uri _u(String path) => Uri.parse("${ApiService.baseUrl}$path");
 
-  static Map<String, String> get _json => const {
-        "Content-Type": "application/json",
-      };
+  static Future<Map<String, String>> get _h => ApiService.authHeaders();
 
   // ---------------------------------------------------------------------------
   // 1) UPSERT PROFILE (buckets + radius + status)
@@ -33,7 +31,7 @@ class ZanCrewApi {
 
     final res = await http.post(
       _u("/zancrew/profile"),
-      headers: _json,
+      headers: await _h,
       body: jsonEncode(body),
     );
 
@@ -58,7 +56,7 @@ class ZanCrewApi {
   // ---------------------------------------------------------------------------
 
   static Future<Map<String, dynamic>?> getProfile(String userId) async {
-    final res = await http.get(_u("/zancrew/profile/$userId"));
+    final res = await http.get(_u("/zancrew/profile/$userId"), headers: await _h);
 
     if (res.statusCode == 404) return null;
 
@@ -92,7 +90,7 @@ class ZanCrewApi {
   // ---------------------------------------------------------------------------
 
   static Future<Map<String, dynamic>?> getState(String userId) async {
-    final res = await http.get(_u("/zancrew/state?user_id=$userId"));
+    final res = await http.get(_u("/zancrew/state?user_id=$userId"), headers: await _h);
 
     if (res.statusCode == 404) return null;
 
@@ -126,7 +124,7 @@ class ZanCrewApi {
   }) async {
     final res = await http.post(
       _u("/zancrew/set_online"),
-      headers: _json,
+      headers: await _h,
       body: jsonEncode({"user_id": userId, "online": online}),
     );
 
@@ -159,7 +157,7 @@ class ZanCrewApi {
 
     final res = await http.post(
       _u("/zancrew/verify/dev/$type"),
-      headers: _json,
+      headers: await _h,
       body: jsonEncode({"user_id": userId}),
     );
 
@@ -179,7 +177,7 @@ class ZanCrewApi {
   // ---------------------------------------------------------------------------
 
   static Future<Map<String, dynamic>> jobCustomerRating(String jobId) async {
-    final res = await http.get(_u("/zancrew/jobs/$jobId/customer_rating"));
+    final res = await http.get(_u("/zancrew/jobs/$jobId/customer_rating"), headers: await _h);
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception("Failed to load rating: ${res.body}");

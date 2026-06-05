@@ -19,6 +19,7 @@ class ZanCrewEarningsService {
     final response = await http.get(
       uri,
       headers: {
+        ...await ApiService.authHeaders(),
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
         "Expires": "0",

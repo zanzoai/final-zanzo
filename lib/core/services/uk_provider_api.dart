@@ -9,7 +9,7 @@ class UkProviderApi {
   static Future<Map<String, dynamic>?> getStatus(String userId) async {
     final res = await http.get(
       Uri.parse('$_base/uk/provider/status/$userId'),
-      headers: {'Accept': 'application/json'},
+      headers: await ApiService.authHeaders(),
     );
     if (res.statusCode == 404) return null;
     if (res.statusCode == 200) {
@@ -41,10 +41,7 @@ class UkProviderApi {
 
     final res = await http.post(
       Uri.parse('$_base/uk/provider/apply'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
+      headers: await ApiService.authHeaders(),
       body: jsonEncode(body),
     );
 

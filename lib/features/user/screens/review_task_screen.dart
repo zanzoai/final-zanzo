@@ -486,7 +486,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
   int _toMinorUnits(double amount, String currency) => (amount * 100).round();
 
   // ========================= PAYMENT =========================
-  Future<String> _createJob() async {
+  Future<String> _createJob(Map<String, String> authHeaders) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('user_id');
 
@@ -503,11 +503,10 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         : _importantNotes.join(", ");
 
     final jobRes = await http.post(
-      Uri.parse("${ApiService.baseUrl}/jobs"),
-      headers: {"Content-Type": "application/json"},
+      Uri.parse("${ApiService.baseUrl}/tasks/tasks/"),
+      headers: authHeaders,
       body: jsonEncode({
-        "user_id": userId,
-        "task_title": _conciseTitle,
+        "title": _conciseTitle,
         "polished_task": _taskController.text,
 
         // DELIVERY / RETURN ADDRESS
@@ -524,8 +523,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         "scheduled_at": scheduledAtIso,
         "duration_hours": _durationHours,
         "people_required": _peopleCount,
-        "estimated_cost_pence": _toMinorUnits(_estimatedCost, _currencyCode),
-        "important_notes": notesText,
+        "estimated_amount": _estimatedCost,
+        "currency": _currencyCode.toLowerCase(),
+        "notes": notesText,
         "actions": _actions,
         "tags": _tags,
       }),
@@ -536,7 +536,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     }
 
     final jobData = jsonDecode(jobRes.body) as Map<String, dynamic>;
-    final jobId = jobData['job_id']?.toString();
+    final jobId = jobData['id']?.toString();
 
     if (jobId == null) throw Exception("No job_id returned");
     return jobId;
@@ -556,20 +556,22 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         return;
       }
 
+      final authHeaders = await ApiService.authHeaders();
+
       print('🔷 [Stripe] creating job...');
-      jobId = await _createJob();
+      jobId = await _createJob(authHeaders);
       print('🔷 [Stripe] job created: $jobId');
 
       final amountPence = _toMinorUnits(_estimatedCost, _currencyCode);
       print('🔷 [Stripe] POST create-payment-intent amount=$amountPence currency=${_currencyCode.toLowerCase()} job=$jobId');
 
       final payRes = await http.post(
-        Uri.parse('${ApiService.baseUrl}/create-payment-intent'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse('${ApiService.baseUrl}/payments/create-payment-intent'),
+        headers: authHeaders,
         body: json.encode({
           'amount': amountPence,
           'currency': _currencyCode.toLowerCase(),
-          'job_id': jobId,
+          'task_id': jobId,
         }),
       );
 
@@ -612,25 +614,10 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       // and jobs.payment_status='authorized' before the job lifecycle events fire.
       final authResp = await http.post(
         Uri.parse("${ApiService.baseUrl}/payments/stripe-authorized"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"job_id": jobId}),
+        headers: authHeaders,
+        body: jsonEncode({"task_id": jobId}),
       );
       print('🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}');
-
-      await http.post(
-        Uri.parse("${ApiService.baseUrl}/jobs/$jobId/events"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"status": "paid", "note": "Payment confirmed"}),
-      );
-
-      await http.post(
-        Uri.parse("${ApiService.baseUrl}/jobs/$jobId/events"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "status": "searching",
-          "note": "Finding available earner",
-        }),
-      );
 
       if (!mounted) return;
 

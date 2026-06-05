@@ -51,50 +51,17 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       if (!mounted) return;
 
       setState(() {
-        _startPin = (m['start_pin'] ?? '').toString();
+        _startPin = (m['start_otp'] ?? '').toString();
 
-        final ep = m['end_pin'];
+        final ep = m['end_otp'];
         _endPin = (ep == null) ? null : ep.toString();
 
-        _startPinUsed = (m['start_pin_used'] == true);
-        _endPinUsed = (m['end_pin_used'] == true);
-
-        final s = m['start_confirmed_at'];
-        final e = m['end_confirmed_at'];
-        _startConfirmedAt = (s is String && s.isNotEmpty)
-            ? DateTime.tryParse(s)
-            : null;
-        _endConfirmedAt = (e is String && e.isNotEmpty)
-            ? DateTime.tryParse(e)
-            : null;
+        _startPinUsed = (m['start_otp_verified'] == true);
+        _endPinUsed = (m['end_otp_verified'] == true);
       });
     } catch (_) {
       // Session not ready – UI will stay without PINs
     }
-  }
-
-  Future<void> _loadSessionSummary() async {
-    if (widget.jobId == null || widget.jobId!.isEmpty) return;
-
-    try {
-      final m = await ApiService.getSessionSummary(widget.jobId!);
-      if (!mounted) return;
-
-      setState(() {
-        _minutesWorked = (m['minutes_worked'] is int)
-            ? m['minutes_worked'] as int
-            : 0;
-
-        final s = m['start_confirmed_at'];
-        final e = m['end_confirmed_at'];
-        _startConfirmedAt = (s is String && s.isNotEmpty)
-            ? DateTime.tryParse(s)
-            : _startConfirmedAt;
-        _endConfirmedAt = (e is String && e.isNotEmpty)
-            ? DateTime.tryParse(e)
-            : _endConfirmedAt;
-      });
-    } catch (_) {}
   }
 
   // ---------------- Status → Stage mapping ----------------
@@ -164,13 +131,6 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       _startPolling();
 
       _loadSession();
-      _loadSessionSummary();
-
-      _sessionTimer?.cancel();
-      _sessionTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-        if (!mounted) return;
-        await _loadSessionSummary();
-      });
     } else {
       _startProgressSimulation();
     }
@@ -197,7 +157,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         try {
           if (_durationMinutes == 0) {
             final url = Uri.parse("${ApiService.baseUrl}/jobs/${widget.jobId}");
-            final httpRes = await http.get(url);
+            final httpRes = await http.get(url, headers: await ApiService.authHeaders());
             if (httpRes.statusCode == 200) {
               final m = json.decode(httpRes.body) as Map<String, dynamic>;
               final d = m['duration_hours'];
@@ -257,7 +217,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
 
       try {
         final url = Uri.parse("${ApiService.baseUrl}/jobs/${widget.jobId}");
-        final res = await http.get(url);
+        final res = await http.get(url, headers: await ApiService.authHeaders());
         if (res.statusCode == 200) {
           final data = json.decode(res.body) as Map<String, dynamic>;
           final status = (data['status'] as String?) ?? '';
@@ -294,7 +254,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       final url = Uri.parse(
         "${ApiService.baseUrl}/zancrew/jobs/${widget.jobId}/assignee",
       );
-      final res = await http.get(url);
+      final res = await http.get(url, headers: await ApiService.authHeaders());
 
       if (res.statusCode == 200) {
         final a = json.decode(res.body) as Map<String, dynamic>;
@@ -398,7 +358,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     try {
       final res = await http.post(
         Uri.parse('${ApiService.baseUrl}/payments/cancel'),
-        headers: {'Content-Type': 'application/json'},
+        headers: await ApiService.authHeaders(),
         body: jsonEncode({'job_id': widget.jobId}),
       );
       if (!mounted) return;
@@ -641,7 +601,6 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
           TextButton(
             onPressed: () async {
               await _loadSession();
-              await _loadSessionSummary();
               if (mounted)
                 ScaffoldMessenger.of(
                   context,

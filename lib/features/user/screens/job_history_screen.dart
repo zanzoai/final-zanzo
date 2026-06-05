@@ -47,6 +47,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
 
       final res = await http.get(
         Uri.parse("${ApiService.baseUrl}/profiles/$userId/jobs"),
+        headers: await ApiService.authHeaders(),
       );
 
       if (res.statusCode == 200) {
