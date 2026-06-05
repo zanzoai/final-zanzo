@@ -224,10 +224,10 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getJobSession(String jobId) async {
-    final res = await _get(_u('/jobs/$jobId/session'));
+    final res = await _get(_u('/tasks/tasks/$jobId/otp'));
     if (res.statusCode != 200) {
       throw HttpException(
-        'GET /jobs/$jobId/session failed: ${res.statusCode} ${res.body}',
+        'GET /tasks/tasks/$jobId/otp failed: ${res.statusCode} ${res.body}',
       );
     }
     return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
