@@ -619,21 +619,6 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       );
       print('🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}');
 
-      await http.post(
-        Uri.parse("${ApiService.baseUrl}/jobs/$jobId/events"),
-        headers: authHeaders,
-        body: jsonEncode({"status": "paid", "note": "Payment confirmed"}),
-      );
-
-      await http.post(
-        Uri.parse("${ApiService.baseUrl}/jobs/$jobId/events"),
-        headers: authHeaders,
-        body: jsonEncode({
-          "status": "searching",
-          "note": "Finding available earner",
-        }),
-      );
-
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
