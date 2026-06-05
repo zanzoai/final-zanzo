@@ -197,7 +197,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         try {
           if (_durationMinutes == 0) {
             final url = Uri.parse("${ApiService.baseUrl}/jobs/${widget.jobId}");
-            final httpRes = await http.get(url);
+            final httpRes = await http.get(url, headers: await ApiService.authHeaders());
             if (httpRes.statusCode == 200) {
               final m = json.decode(httpRes.body) as Map<String, dynamic>;
               final d = m['duration_hours'];
@@ -257,7 +257,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
 
       try {
         final url = Uri.parse("${ApiService.baseUrl}/jobs/${widget.jobId}");
-        final res = await http.get(url);
+        final res = await http.get(url, headers: await ApiService.authHeaders());
         if (res.statusCode == 200) {
           final data = json.decode(res.body) as Map<String, dynamic>;
           final status = (data['status'] as String?) ?? '';
@@ -294,7 +294,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       final url = Uri.parse(
         "${ApiService.baseUrl}/zancrew/jobs/${widget.jobId}/assignee",
       );
-      final res = await http.get(url);
+      final res = await http.get(url, headers: await ApiService.authHeaders());
 
       if (res.statusCode == 200) {
         final a = json.decode(res.body) as Map<String, dynamic>;
@@ -398,7 +398,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     try {
       final res = await http.post(
         Uri.parse('${ApiService.baseUrl}/payments/cancel'),
-        headers: {'Content-Type': 'application/json'},
+        headers: await ApiService.authHeaders(),
         body: jsonEncode({'job_id': widget.jobId}),
       );
       if (!mounted) return;

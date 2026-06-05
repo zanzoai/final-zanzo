@@ -486,7 +486,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
   int _toMinorUnits(double amount, String currency) => (amount * 100).round();
 
   // ========================= PAYMENT =========================
-  Future<String> _createJob() async {
+  Future<String> _createJob(Map<String, String> authHeaders) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('user_id');
 
@@ -504,7 +504,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
 
     final jobRes = await http.post(
       Uri.parse("${ApiService.baseUrl}/jobs"),
-      headers: {"Content-Type": "application/json"},
+      headers: authHeaders,
       body: jsonEncode({
         "user_id": userId,
         "task_title": _conciseTitle,
@@ -556,8 +556,10 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         return;
       }
 
+      final authHeaders = await ApiService.authHeaders();
+
       print('🔷 [Stripe] creating job...');
-      jobId = await _createJob();
+      jobId = await _createJob(authHeaders);
       print('🔷 [Stripe] job created: $jobId');
 
       final amountPence = _toMinorUnits(_estimatedCost, _currencyCode);
@@ -565,7 +567,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
 
       final payRes = await http.post(
         Uri.parse('${ApiService.baseUrl}/create-payment-intent'),
-        headers: {'Content-Type': 'application/json'},
+        headers: authHeaders,
         body: json.encode({
           'amount': amountPence,
           'currency': _currencyCode.toLowerCase(),
@@ -612,20 +614,20 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       // and jobs.payment_status='authorized' before the job lifecycle events fire.
       final authResp = await http.post(
         Uri.parse("${ApiService.baseUrl}/payments/stripe-authorized"),
-        headers: {"Content-Type": "application/json"},
+        headers: authHeaders,
         body: jsonEncode({"job_id": jobId}),
       );
       print('🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}');
 
       await http.post(
         Uri.parse("${ApiService.baseUrl}/jobs/$jobId/events"),
-        headers: {"Content-Type": "application/json"},
+        headers: authHeaders,
         body: jsonEncode({"status": "paid", "note": "Payment confirmed"}),
       );
 
       await http.post(
         Uri.parse("${ApiService.baseUrl}/jobs/$jobId/events"),
-        headers: {"Content-Type": "application/json"},
+        headers: authHeaders,
         body: jsonEncode({
           "status": "searching",
           "note": "Finding available earner",

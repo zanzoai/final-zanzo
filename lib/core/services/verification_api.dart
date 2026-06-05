@@ -12,9 +12,7 @@ import 'package:zanzo_frontend/core/services/zancrew_api.dart';
 class VerificationApi {
   static Uri _u(String path) => Uri.parse('${ApiService.baseUrl}$path');
 
-  static const Map<String, String> _json = {
-    'Content-Type': 'application/json',
-  };
+  static Future<Map<String, String>> get _h => ApiService.authHeaders();
 
   // ---------------------------------------------------------------------------
   // PAN VERIFICATION
@@ -28,7 +26,7 @@ class VerificationApi {
   }) async {
     final res = await http.post(
       _u('/verification/idfy/pan/verify'),
-      headers: _json,
+      headers: await _h,
       body: jsonEncode({
         'user_id': userId,
         'pan_number': pan,
@@ -64,7 +62,7 @@ class VerificationApi {
   }) async {
     final res = await http.post(
       _u('/verification/idfy/bank/verify'),
-      headers: _json,
+      headers: await _h,
       body: jsonEncode({
         'user_id': userId,
         'account_number': accountNumber,
@@ -93,7 +91,7 @@ class VerificationApi {
   // ---------------------------------------------------------------------------
 
   static Future<Map<String, dynamic>> fetchStatus(String userId) async {
-    final res = await http.get(_u('/verification/status/$userId'));
+    final res = await http.get(_u('/verification/status/$userId'), headers: await _h);
     final body = _decode(res);
 
     if (res.statusCode >= 300) {
@@ -121,7 +119,7 @@ class VerificationApi {
     try {
       final res = await http.post(
         _u('/zancrew/verify/dev/$type'),
-        headers: _json,
+        headers: await _h,
         body: jsonEncode({'user_id': userId}),
       );
 
@@ -201,7 +199,7 @@ class VerificationApi {
     print("📤 Unified verification payload: $payload");
 
     final headers = {
-      "Content-Type": "application/json",
+      ...await _h,
       if (debugForceVerifyHeader) "X-Debug-Force-Verify": "true",
     };
 

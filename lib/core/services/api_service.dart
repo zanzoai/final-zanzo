@@ -35,7 +35,7 @@ class ApiService {
   static Uri _u(String path) => Uri.parse('$baseUrl$path');
 
   /// Returns JSON headers merged with Authorization if an access_token exists.
-  static Future<Map<String, String>> _authHeaders() async {
+  static Future<Map<String, String>> authHeaders() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
     if (token == null || token.isEmpty) return jsonHeaders;
@@ -126,7 +126,7 @@ class ApiService {
       final res = await _post(
         url,
         payload,
-        headers: await _authHeaders(),
+        headers: await authHeaders(),
         timeout: const Duration(seconds: 40),
       );
 
@@ -208,7 +208,7 @@ class ApiService {
 
     final res = await http.post(
       url,
-      headers: {'Content-Type': 'application/json'},
+      headers: await authHeaders(),
       body: jsonEncode(payload),
     );
 
@@ -633,7 +633,7 @@ class ApiService {
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 12),
   }) async {
-    final base = await _authHeaders();
+    final base = await authHeaders();
     final merged = {...base, if (headers != null) ...headers};
     final url = _u(path);
     _log('postJson', 'POST $url payload=${jsonEncode(body)}');
@@ -648,7 +648,7 @@ class ApiService {
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 12),
   }) async {
-    final base = await _authHeaders();
+    final base = await authHeaders();
     final merged = {...base, if (headers != null) ...headers};
     final url = _u(path);
     _log('getJson', 'GET $url');
