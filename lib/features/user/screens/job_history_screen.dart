@@ -1,16 +1,9 @@
 // This screen fetches and displays the user’s full job history, showing each job in an expandable card with detailed information.
 //It also allows users to either track an ongoing job or re-request a completed job with pre-filled details
 
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-// Core services
-import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/features/user/screens/review_task_screen.dart';
-// User screens
 import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
 
 class JobHistoryScreen extends StatefulWidget {
@@ -31,49 +24,11 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
   }
 
   Future<void> _fetchJobs() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('user_id');
-
-      if (userId == null || userId.isEmpty) {
-        setState(() => isLoading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('No user logged in')));
-        }
-        return;
-      }
-
-      final res = await http.get(
-        Uri.parse("${ApiService.baseUrl}/profiles/$userId/jobs"),
-        headers: await ApiService.authHeaders(),
-      );
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (mounted) {
-          setState(() {
-            jobs = (data is List) ? data : [];
-            isLoading = false;
-          });
-        }
-      } else {
-        setState(() => isLoading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error fetching jobs: ${res.body}')),
-          );
-        }
-      }
-    } catch (e) {
-      setState(() => isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Network error: $e')));
-      }
-    }
+    // No customer task history endpoint is available on this backend version.
+    setState(() {
+      jobs = [];
+      isLoading = false;
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -263,7 +218,16 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : jobs.isEmpty
-          ? const Center(child: Text("No jobs found"))
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  "Order history is not available yet on this backend version.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
           : ListView.separated(
               padding: const EdgeInsets.all(12),
               itemCount: jobs.length,

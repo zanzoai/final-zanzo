@@ -83,8 +83,17 @@ class _ZanCrewEarningsDetailsScreenState
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : data == null
-          ? const Center(child: Text("No data"))
+          : (data == null || data!.isEmpty)
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  "Earnings data is not available on this backend version.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
           : RefreshIndicator(
               // Pull to refresh → just call loadEarnings (no fullscreen loader)
               onRefresh: loadEarnings,

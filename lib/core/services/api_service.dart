@@ -364,13 +364,13 @@ class ApiService {
     int limit = 20,
   }) async {
     final url = Uri.parse(
-      '$baseUrl/zancrew/my_jobs',
-    ).replace(queryParameters: {'crew_user_id': crewUserId, 'limit': '$limit'});
+      '$baseUrl/zancrew/history',
+    ).replace(queryParameters: {'limit': '$limit'});
 
-    final res = await _get(url);
+    final res = await _get(url, headers: await authHeaders());
     if (res.statusCode != 200) {
       throw HttpException(
-        'GET /zancrew/my_jobs failed: ${res.statusCode} ${_truncate(res.body)}',
+        'GET /zancrew/history failed: ${res.statusCode} ${_truncate(res.body)}',
       );
     }
 
@@ -378,16 +378,17 @@ class ApiService {
     try {
       decoded = jsonDecode(res.body);
     } catch (e) {
-      throw HttpException('GET /zancrew/my_jobs JSON decode failed: $e');
+      throw HttpException('GET /zancrew/history JSON decode failed: $e');
     }
 
-    if (decoded is! List) {
-      throw const HttpException('Unexpected my_jobs payload shape');
+    final taskList = (decoded is Map) ? decoded['tasks'] : decoded;
+    if (taskList is! List) {
+      throw const HttpException('Unexpected history payload shape');
     }
 
-    return decoded.map<Map<String, dynamic>>((e) {
+    return taskList.map<Map<String, dynamic>>((e) {
       final m = Map<String, dynamic>.from(e as Map);
-      m['job_id'] = (m['job_id'] ?? '').toString();
+      m['job_id'] = (m['task_id'] ?? '').toString();
       m['status'] = (m['status'] ?? '').toString().toLowerCase();
       return m;
     }).toList();
