@@ -402,11 +402,11 @@ class ApiService {
     required double lat,
     required double lng,
   }) async {
-    final payload = {'crew_user_id': crewUserId, 'lat': lat, 'lng': lng};
+    final payload = {'lat': lat, 'lng': lng};
 
     try {
       final res = await _post(
-        _u('/crew_location/update'),
+        _u('/zancrew/crew_location/update'),
         payload,
         timeout: const Duration(seconds: 8),
       );
@@ -436,17 +436,17 @@ class ApiService {
     });
   }
 
-  // POST /auth/auth/verify-email-otp  →  { email, otp }
+  // POST /auth/verify-email-otp  →  { email, otp }
   static Future<http.Response> verifyEmailOtp(String email, String otp) {
-    return _post(_u('/auth/auth/verify-email-otp'), {
+    return _post(_u('/auth/verify-email-otp'), {
       'email': email.trim(),
       'otp': otp.trim(),
     });
   }
 
-  // POST /auth/auth/send-phone-otp  →  { phone }
+  // POST /auth/send-phone-otp  →  { phone }
   static Future<http.Response> sendPhoneOtp(String phoneE164) {
-    return _post(_u('/auth/auth/send-phone-otp'), {'phone': phoneE164.trim()});
+    return _post(_u('/auth/send-phone-otp'), {'phone': phoneE164.trim()});
   }
 
   // POST /auth/auth/verify-phone-otp  →  { phone, code }
@@ -504,7 +504,7 @@ class ApiService {
     }
   }
 
-  // POST /auth/auth/refresh  →  { refresh_token }
+  // POST /auth/refresh  →  { refresh_token }
   // Returns a new TokenPair and updates stored tokens.
   static Future<bool> refreshToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -515,7 +515,7 @@ class ApiService {
     }
 
     try {
-      final res = await _post(_u('/auth/auth/refresh'), {
+      final res = await _post(_u('/auth/refresh'), {
         'refresh_token': refreshTok,
       }, timeout: const Duration(seconds: 15));
 
@@ -543,7 +543,7 @@ class ApiService {
     }
   }
 
-  // POST /auth/auth/logout  →  { refresh_token }  (requires Bearer token)
+  // POST /auth/logout  →  { refresh_token }  (requires Bearer token)
   // Invalidates the refresh token on the server.
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
@@ -555,7 +555,7 @@ class ApiService {
     try {
       await httpClient
           .post(
-            _u('/auth/auth/logout'),
+            _u('/auth/logout'),
             headers: {...jsonHeaders, 'Authorization': 'Bearer $access'},
             body: jsonEncode({'refresh_token': refresh}),
           )
@@ -565,7 +565,7 @@ class ApiService {
     }
   }
 
-  // GET /auth/auth/me  (requires Bearer token)
+  // GET /auth/me  (requires Bearer token)
   // Returns the current user's profile as a Map, or null on failure.
   static Future<Map<String, dynamic>?> getMe() async {
     final prefs = await SharedPreferences.getInstance();
@@ -575,7 +575,7 @@ class ApiService {
     try {
       final res = await httpClient
           .get(
-            _u('/auth/auth/me'),
+            _u('/auth/me'),
             headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
           )
           .timeout(const Duration(seconds: 12));
@@ -591,7 +591,7 @@ class ApiService {
     }
   }
 
-  // PATCH /auth/auth/me  →  { full_name?, password? }  (requires Bearer token)
+  // PATCH /auth/me  →  { full_name?, password? }  (requires Bearer token)
   // Updates the current user's profile.
   static Future<Map<String, dynamic>?> updateProfile({
     String? fullName,
@@ -609,7 +609,7 @@ class ApiService {
     try {
       final res = await httpClient
           .patch(
-            _u('/auth/auth/me'),
+            _u('/auth/me'),
             headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
             body: jsonEncode(payload),
           )
