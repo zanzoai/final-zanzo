@@ -13,8 +13,11 @@ class ApiService {
   // static const String baseUrl =
   //     "https://zanzo-uk-backend-production-4236.up.railway.app";
 
+  // static const String baseUrl =
+  //     "https://zanzo-uk-backend-production.up.railway.app/api/v1";
+
   static const String baseUrl =
-      "https://zanzo-uk-backend-production.up.railway.app/api/v1";
+      "https://zanzo-uk-backend-production-b2d0.up.railway.app/api/v1";
 
   /// Backend base URL (LAN/IP for local device testing)
   // static const String baseUrl = "http://192.168.193.93:8000";
@@ -108,7 +111,7 @@ class ApiService {
     required double latitude,
     required double longitude,
   }) async {
-    final url = _u('/tasks/tasks/process');
+    final url = _u('/tasks/process');
     final payload = {
       'user_input': userInput,
       'latitude': latitude,
@@ -136,12 +139,16 @@ class ApiService {
       print('[API][process_task] ← body=${_truncate(res.body)}');
 
       if (res.statusCode != 200) {
-        _log('process_task', '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}');
+        _log(
+          'process_task',
+          '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}',
+        );
         String detail = 'HTTP ${res.statusCode}';
         try {
           final body = jsonDecode(res.body);
           if (body is Map) {
-            detail = body['detail']?.toString() ??
+            detail =
+                body['detail']?.toString() ??
                 body['message']?.toString() ??
                 body['error']?.toString() ??
                 detail;
@@ -177,7 +184,9 @@ class ApiService {
       return {
         "ok": false,
         "error_type": "network",
-        "user_message": e.message.isNotEmpty ? e.message : "No internet connection.",
+        "user_message": e.message.isNotEmpty
+            ? e.message
+            : "No internet connection.",
       };
     } catch (e, st) {
       _log('process_task', '❌ error: $e\n$st');
@@ -224,10 +233,10 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getJobSession(String jobId) async {
-    final res = await _get(_u('/tasks/tasks/$jobId/otp'));
+    final res = await _get(_u('/tasks/$jobId/otp'));
     if (res.statusCode != 200) {
       throw HttpException(
-        'GET /tasks/tasks/$jobId/otp failed: ${res.statusCode} ${res.body}',
+        'GET /tasks/$jobId/otp failed: ${res.statusCode} ${res.body}',
       );
     }
     return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
@@ -427,7 +436,7 @@ class ApiService {
 
   // POST /auth/auth/send-email-otp  →  { name?, email }
   static Future<http.Response> sendEmailOtp(String email, {String? name}) {
-    return _post(_u('/auth/auth/send-email-otp'), {
+    return _post(_u('/auth/send-email-otp'), {
       'email': email.trim(),
       if (name != null) 'name': name.trim(),
     });
@@ -449,7 +458,7 @@ class ApiService {
   // POST /auth/auth/verify-phone-otp  →  { phone, code }
   // Stores access_token, refresh_token, user_id, user_phone, user_role in prefs.
   static Future<bool> verifyPhoneOtp(String phoneE164, String code) async {
-    final res = await _post(_u('/auth/auth/verify-phone-otp'), {
+    final res = await _post(_u('/auth/verify-phone-otp'), {
       'phone': phoneE164.trim(),
       'code': code.trim(),
     });

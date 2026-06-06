@@ -503,7 +503,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         : _importantNotes.join(", ");
 
     final jobRes = await http.post(
-      Uri.parse("${ApiService.baseUrl}/tasks/tasks/"),
+      Uri.parse("${ApiService.baseUrl}/tasks/"),
       headers: authHeaders,
       body: jsonEncode({
         "title": _conciseTitle,
@@ -563,7 +563,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       print('🔷 [Stripe] job created: $jobId');
 
       final amountPence = _toMinorUnits(_estimatedCost, _currencyCode);
-      print('🔷 [Stripe] POST create-payment-intent amount=$amountPence currency=${_currencyCode.toLowerCase()} job=$jobId');
+      print(
+        '🔷 [Stripe] POST create-payment-intent amount=$amountPence currency=${_currencyCode.toLowerCase()} job=$jobId',
+      );
 
       final payRes = await http.post(
         Uri.parse('${ApiService.baseUrl}/payments/create-payment-intent'),
@@ -575,7 +577,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         }),
       );
 
-      print('🔷 [Stripe] payment-intent response: ${payRes.statusCode} ${payRes.body}');
+      print(
+        '🔷 [Stripe] payment-intent response: ${payRes.statusCode} ${payRes.body}',
+      );
 
       if (payRes.statusCode < 200 || payRes.statusCode >= 300) {
         throw Exception("Create intent failed: ${payRes.body}");
@@ -584,7 +588,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       final payData = json.decode(payRes.body);
       final clientSecret = payData['client_secret'];
 
-      print('🔷 [Stripe] clientSecret present: ${clientSecret != null} prefix: ${clientSecret?.toString().substring(0, 20)}');
+      print(
+        '🔷 [Stripe] clientSecret present: ${clientSecret != null} prefix: ${clientSecret?.toString().substring(0, 20)}',
+      );
 
       if (clientSecret == null) {
         throw Exception("No client_secret returned");
@@ -599,7 +605,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
           returnURL: 'zanzo://stripe-redirect',
         ),
       );
-      print('🟡 [Stripe] initPaymentSheet complete — clearing loading state before present');
+      print(
+        '🟡 [Stripe] initPaymentSheet complete — clearing loading state before present',
+      );
       // iOS: native sheet presentation fails silently if Flutter is mid-frame rebuild.
       // Clear loading state and yield one event-loop tick so the view hierarchy settles.
       setState(() => _isProcessing = false);
@@ -617,7 +625,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         headers: authHeaders,
         body: jsonEncode({"task_id": jobId}),
       );
-      print('🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}');
+      print(
+        '🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}',
+      );
 
       if (!mounted) return;
 
@@ -638,7 +648,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         ),
       );
     } on StripeException catch (e) {
-      print('🔴 [Stripe] StripeException: code=${e.error.code} message=${e.error.localizedMessage} declineCode=${e.error.declineCode}');
+      print(
+        '🔴 [Stripe] StripeException: code=${e.error.code} message=${e.error.localizedMessage} declineCode=${e.error.declineCode}',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('❌ Stripe error: ${e.error.localizedMessage}')),
@@ -689,7 +701,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     final lng = prefs.getDouble('review_lng');
 
     if (lat == null || lng == null) {
-      print('🔴 [Stripe] lat/lng missing from prefs — blocking payment (lat=$lat lng=$lng)');
+      print(
+        '🔴 [Stripe] lat/lng missing from prefs — blocking payment (lat=$lat lng=$lng)',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

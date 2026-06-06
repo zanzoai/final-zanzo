@@ -91,7 +91,7 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
     }
 
     try {
-      final url = Uri.parse("${ApiService.baseUrl}/auth/auth/send-phone-otp");
+      final url = Uri.parse("${ApiService.baseUrl}/auth/send-phone-otp");
       final res = await ApiService.httpClient.post(
         url,
         headers: ApiService.jsonHeaders,
@@ -138,7 +138,7 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
     }
 
     try {
-      final url = Uri.parse("${ApiService.baseUrl}/auth/auth/verify-phone-otp");
+      final url = Uri.parse("${ApiService.baseUrl}/auth/verify-phone-otp");
       final res = await ApiService.httpClient.post(
         url,
         headers: ApiService.jsonHeaders,
