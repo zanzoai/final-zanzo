@@ -118,7 +118,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
   Future<void> _loadJob() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiService.getJson('/jobs/${widget.jobId}');
+      final res = await ApiService.getJson('/tasks/${widget.jobId}');
       if (!mounted) return;
 
       if (res.statusCode == 200) {

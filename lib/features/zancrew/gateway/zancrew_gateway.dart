@@ -157,7 +157,7 @@ class _ZanCrewGatewayState extends State<ZanCrewGateway> {
       // -----------------------------------------------------------------------
       try {
         final activeRes = await ApiService.getJson(
-          '/zancrew/active_job?user_id=$userId',
+          '/zancrew/active_task',
         );
 
         if (activeRes.statusCode == 200) {
@@ -165,8 +165,8 @@ class _ZanCrewGatewayState extends State<ZanCrewGateway> {
 
           if (decoded is Map &&
               decoded['active'] == true &&
-              decoded['job_id'] != null) {
-            final jobId = decoded['job_id'].toString();
+              decoded['task_id'] != null) {
+            final jobId = decoded['task_id'].toString();
             if (!mounted) return;
             Navigator.pushReplacement(
               context,

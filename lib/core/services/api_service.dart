@@ -207,7 +207,7 @@ class ApiService {
     String note,
     String crewUserId,
   ) async {
-    final url = Uri.parse('$baseUrl/zancrew/jobs/$jobId/events');
+    final url = Uri.parse('$baseUrl/zancrew/tasks/$jobId/events');
 
     final payload = {
       "status": status,
@@ -223,13 +223,13 @@ class ApiService {
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception(
-        'POST /zancrew/jobs/$jobId/events failed (${res.statusCode}): ${res.body}',
+        'POST /zancrew/tasks/$jobId/events failed (${res.statusCode}): ${res.body}',
       );
     }
   }
 
   static Future<http.Response> getJob(String jobId) {
-    return _get(_u('/jobs/$jobId'));
+    return _get(_u('/tasks/$jobId'));
   }
 
   static Future<Map<String, dynamic>> getJobSession(String jobId) async {
@@ -243,30 +243,24 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getSessionSummary(String jobId) async {
-    final res = await _get(_u('/jobs/$jobId/session/summary'));
-    if (res.statusCode != 200) {
-      throw HttpException(
-        'GET /jobs/$jobId/session/summary failed: ${res.statusCode} ${res.body}',
-      );
-    }
-    return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+    return {};
   }
 
   static Future<void> postSessionStart(String jobId, String pin) async {
-    final res = await _post(_u('/jobs/$jobId/session/start'), {"pin": pin});
+    final res = await _post(_u('/tasks/$jobId/verify-start-otp'), {"otp": pin});
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
-        'POST /jobs/$jobId/session/start failed: '
+        'POST /tasks/$jobId/verify-start-otp failed: '
         '${res.statusCode} ${_truncate(res.body)}',
       );
     }
   }
 
   static Future<void> postSessionEnd(String jobId, String pin) async {
-    final res = await _post(_u('/jobs/$jobId/session/end'), {"pin": pin});
+    final res = await _post(_u('/tasks/$jobId/verify-end-otp'), {"otp": pin});
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
-        'POST /jobs/$jobId/session/end failed: '
+        'POST /tasks/$jobId/verify-end-otp failed: '
         '${res.statusCode} ${_truncate(res.body)}',
       );
     }
