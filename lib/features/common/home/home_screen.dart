@@ -261,14 +261,14 @@ class _HomeScreenState extends State<HomeScreen>
     if (userId.isEmpty) return;
     try {
       final res = await ApiService.getJson(
-        '/zancrew/active_job?user_id=$userId',
+        '/zancrew/active_task',
       );
       if (!mounted) return;
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is Map && data['active'] == true) {
           setState(() {
-            _activeJobId = data['job_id']?.toString();
+            _activeJobId = (data['task_id'] ?? data['job_id'])?.toString();
             _activeJobTitle = data['task_title']?.toString();
             _activeJobStatus = data['status']?.toString();
           });

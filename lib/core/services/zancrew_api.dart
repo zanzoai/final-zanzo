@@ -177,7 +177,7 @@ class ZanCrewApi {
   // ---------------------------------------------------------------------------
 
   static Future<Map<String, dynamic>> jobCustomerRating(String jobId) async {
-    final res = await http.get(_u("/zancrew/jobs/$jobId/customer_rating"), headers: await _h);
+    final res = await http.get(_u("/zancrew/tasks/$jobId/customer_rating"), headers: await _h);
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception("Failed to load rating: ${res.body}");

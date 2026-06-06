@@ -235,7 +235,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
 
     setState(() => _loading = true);
     try {
-      final res = await ApiService.getJson('/jobs/$_jobId');
+      final res = await ApiService.getJson('/tasks/$_jobId');
 
       if (!mounted) return;
       if (res.statusCode == 200) {
