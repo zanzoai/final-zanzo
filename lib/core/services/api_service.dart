@@ -277,13 +277,12 @@ class ApiService {
   }) async {
     final url = Uri.parse('$baseUrl/zancrew/offers').replace(
       queryParameters: {
-        'crew_user_id': crewUserId,
         'status': status,
         'limit': '$limit',
       },
     );
 
-    final res = await _get(url);
+    final res = await _get(url, headers: await authHeaders());
     if (res.statusCode != 200) {
       throw HttpException(
         'GET /zancrew/offers failed: ${res.statusCode} ${_truncate(res.body)}',
@@ -409,6 +408,7 @@ class ApiService {
       final res = await _post(
         _u('/zancrew/crew_location/update'),
         payload,
+        headers: await authHeaders(),
         timeout: const Duration(seconds: 8),
       );
 
