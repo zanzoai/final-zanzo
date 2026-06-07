@@ -25,6 +25,8 @@ class ApiService {
   /// Shared HTTP client
   static final http.Client httpClient = http.Client();
 
+  static bool _refreshing = false;
+
   /// Common JSON headers
   static Map<String, String> get jsonHeaders => const {
     'Content-Type': 'application/json',
@@ -43,6 +45,26 @@ class ApiService {
     final token = prefs.getString('access_token');
     if (token == null || token.isEmpty) return jsonHeaders;
     return {...jsonHeaders, 'Authorization': 'Bearer $token'};
+  }
+
+  /// Runs [request] with current auth headers.
+  /// On 401, refreshes tokens once and retries. Returns original 401 if
+  /// refresh fails or a refresh is already in progress.
+  static Future<http.Response> callWithRefresh(
+    Future<http.Response> Function(Map<String, String> headers) request,
+  ) async {
+    final res = await request(await authHeaders());
+    if (res.statusCode != 401 || _refreshing) return res;
+    _log('auth', '⚠️ 401 — attempting token refresh');
+    _refreshing = true;
+    final ok = await refreshToken();
+    _refreshing = false;
+    if (!ok) {
+      _log('auth', '⚠️ refresh failed — propagating 401');
+      return res;
+    }
+    _log('auth', '✅ refreshed — retrying request');
+    return request(await authHeaders());
   }
 
   static void _log(String tag, Object msg) {
@@ -126,11 +148,13 @@ class ApiService {
     print('[API][process_task] body=${jsonEncode(payload)}');
 
     try {
-      final res = await _post(
-        url,
-        payload,
-        headers: await authHeaders(),
-        timeout: const Duration(seconds: 40),
+      final res = await callWithRefresh(
+        (h) => _post(
+          url,
+          payload,
+          headers: h,
+          timeout: const Duration(seconds: 40),
+        ),
       );
 
       // ignore: avoid_print
@@ -215,10 +239,8 @@ class ApiService {
       "crew_user_id": crewUserId,
     };
 
-    final res = await http.post(
-      url,
-      headers: await authHeaders(),
-      body: jsonEncode(payload),
+    final res = await callWithRefresh(
+      (h) => httpClient.post(url, headers: h, body: jsonEncode(payload)),
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -228,14 +250,13 @@ class ApiService {
     }
   }
 
-  static Future<http.Response> getJob(String jobId) async {
-    return _get(_u('/tasks/$jobId'), headers: await authHeaders());
+  static Future<http.Response> getJob(String jobId) {
+    return callWithRefresh((h) => _get(_u('/tasks/$jobId'), headers: h));
   }
 
   static Future<Map<String, dynamic>> getJobSession(String jobId) async {
-    final res = await _get(
-      _u('/tasks/$jobId/otp'),
-      headers: await authHeaders(),
+    final res = await callWithRefresh(
+      (h) => _get(_u('/tasks/$jobId/otp'), headers: h),
     );
     if (res.statusCode != 200) {
       throw HttpException(
@@ -250,9 +271,10 @@ class ApiService {
   }
 
   static Future<void> postSessionStart(String jobId, String pin) async {
-    final res = await _post(_u('/tasks/$jobId/verify-start-otp'), {
-      "otp": pin,
-    }, headers: await authHeaders());
+    final res = await callWithRefresh(
+      (h) =>
+          _post(_u('/tasks/$jobId/verify-start-otp'), {"otp": pin}, headers: h),
+    );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
         'POST /tasks/$jobId/verify-start-otp failed: '
@@ -262,9 +284,10 @@ class ApiService {
   }
 
   static Future<void> postSessionEnd(String jobId, String pin) async {
-    final res = await _post(_u('/tasks/$jobId/verify-end-otp'), {
-      "otp": pin,
-    }, headers: await authHeaders());
+    final res = await callWithRefresh(
+      (h) =>
+          _post(_u('/tasks/$jobId/verify-end-otp'), {"otp": pin}, headers: h),
+    );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
         'POST /tasks/$jobId/verify-end-otp failed: '
@@ -286,7 +309,7 @@ class ApiService {
       '$baseUrl/zancrew/offers',
     ).replace(queryParameters: {'status': status, 'limit': '$limit'});
 
-    final res = await _get(url, headers: await authHeaders());
+    final res = await callWithRefresh((h) => _get(url, headers: h));
     if (res.statusCode != 200) {
       throw HttpException(
         'GET /zancrew/offers failed: ${res.statusCode} ${_truncate(res.body)}',
@@ -331,19 +354,16 @@ class ApiService {
   }
 
   static Future<http.Response> getOfferDetail(String offerId) async {
-    final res = await _get(
-      _u('/zancrew/offers/$offerId'),
-      headers: await authHeaders(),
+    final res = await callWithRefresh(
+      (h) => _get(_u('/zancrew/offers/$offerId'), headers: h),
     );
     _log('offer.detail', 'id=$offerId body=${_truncate(res.body, max: 600)}');
     return res;
   }
 
   static Future<Map<String, dynamic>> acceptOffer(String offerId) async {
-    final res = await _post(
-      _u('/zancrew/offers/$offerId/accept'),
-      {},
-      headers: await authHeaders(),
+    final res = await callWithRefresh(
+      (h) => _post(_u('/zancrew/offers/$offerId/accept'), {}, headers: h),
     );
     if (res.statusCode != 200) {
       throw HttpException(
@@ -355,10 +375,8 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> rejectOffer(String offerId) async {
-    final res = await _post(
-      _u('/zancrew/offers/$offerId/reject'),
-      {},
-      headers: await authHeaders(),
+    final res = await callWithRefresh(
+      (h) => _post(_u('/zancrew/offers/$offerId/reject'), {}, headers: h),
     );
     if (res.statusCode != 200) {
       throw HttpException(
@@ -381,7 +399,7 @@ class ApiService {
       '$baseUrl/zancrew/history',
     ).replace(queryParameters: {'limit': '$limit'});
 
-    final res = await _get(url, headers: await authHeaders());
+    final res = await callWithRefresh((h) => _get(url, headers: h));
     if (res.statusCode != 200) {
       throw HttpException(
         'GET /zancrew/history failed: ${res.statusCode} ${_truncate(res.body)}',
@@ -420,11 +438,13 @@ class ApiService {
     final payload = {'lat': lat, 'lng': lng};
 
     try {
-      final res = await _post(
-        _u('/zancrew/crew_location/update'),
-        payload,
-        headers: await authHeaders(),
-        timeout: const Duration(seconds: 8),
+      final res = await callWithRefresh(
+        (h) => _post(
+          _u('/zancrew/crew_location/update'),
+          payload,
+          headers: h,
+          timeout: const Duration(seconds: 8),
+        ),
       );
 
       if (res.statusCode == 200) {
@@ -652,14 +672,17 @@ class ApiService {
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 12),
   }) async {
-    final base = await authHeaders();
-    final merged = {...base, if (headers != null) ...headers};
     final url = _u(path);
     _log('postJson', 'POST $url payload=${jsonEncode(body)}');
-
-    return httpClient
-        .post(url, headers: merged, body: jsonEncode(body))
-        .timeout(timeout);
+    return callWithRefresh(
+      (h) => httpClient
+          .post(
+            url,
+            headers: {...h, if (headers != null) ...headers},
+            body: jsonEncode(body),
+          )
+          .timeout(timeout),
+    );
   }
 
   static Future<http.Response> getJson(
@@ -667,12 +690,13 @@ class ApiService {
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 12),
   }) async {
-    final base = await authHeaders();
-    final merged = {...base, if (headers != null) ...headers};
     final url = _u(path);
     _log('getJson', 'GET $url');
-
-    return httpClient.get(url, headers: merged).timeout(timeout);
+    return callWithRefresh(
+      (h) => httpClient
+          .get(url, headers: {...h, if (headers != null) ...headers})
+          .timeout(timeout),
+    );
   }
 
   // ---------------------------------------------------------------------------

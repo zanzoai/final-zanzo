@@ -10,7 +10,9 @@ import 'package:zanzo_frontend/core/services/api_service.dart';
 class ZanCrewApi {
   static Uri _u(String path) => Uri.parse("${ApiService.baseUrl}$path");
 
-  static Future<Map<String, String>> get _h => ApiService.authHeaders();
+  static Future<http.Response> _call(
+    Future<http.Response> Function(Map<String, String> h) fn,
+  ) => ApiService.callWithRefresh(fn);
 
   // ---------------------------------------------------------------------------
   // 1) UPSERT PROFILE (buckets + radius + status)
@@ -29,10 +31,8 @@ class ZanCrewApi {
       "status": status ?? "pending",
     };
 
-    final res = await http.post(
-      _u("/zancrew/profile"),
-      headers: await _h,
-      body: jsonEncode(body),
+    final res = await _call(
+      (h) => http.post(_u("/zancrew/profile"), headers: h, body: jsonEncode(body)),
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -56,7 +56,7 @@ class ZanCrewApi {
   // ---------------------------------------------------------------------------
 
   static Future<Map<String, dynamic>?> getProfile(String userId) async {
-    final res = await http.get(_u("/zancrew/profile/$userId"), headers: await _h);
+    final res = await _call((h) => http.get(_u("/zancrew/profile/$userId"), headers: h));
 
     if (res.statusCode == 404) return null;
 
@@ -90,7 +90,7 @@ class ZanCrewApi {
   // ---------------------------------------------------------------------------
 
   static Future<Map<String, dynamic>?> getState(String userId) async {
-    final res = await http.get(_u("/zancrew/state?user_id=$userId"), headers: await _h);
+    final res = await _call((h) => http.get(_u("/zancrew/state?user_id=$userId"), headers: h));
 
     if (res.statusCode == 404) return null;
 
@@ -122,10 +122,12 @@ class ZanCrewApi {
     required String userId,
     required bool online,
   }) async {
-    final res = await http.post(
-      _u("/zancrew/set_online"),
-      headers: await _h,
-      body: jsonEncode({"user_id": userId, "online": online}),
+    final res = await _call(
+      (h) => http.post(
+        _u("/zancrew/set_online"),
+        headers: h,
+        body: jsonEncode({"user_id": userId, "online": online}),
+      ),
     );
 
     if (res.statusCode == 403) {
@@ -155,10 +157,12 @@ class ZanCrewApi {
   }) async {
     assert(type == "bank" || type == "kyc");
 
-    final res = await http.post(
-      _u("/zancrew/verify/dev/$type"),
-      headers: await _h,
-      body: jsonEncode({"user_id": userId}),
+    final res = await _call(
+      (h) => http.post(
+        _u("/zancrew/verify/dev/$type"),
+        headers: h,
+        body: jsonEncode({"user_id": userId}),
+      ),
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -177,7 +181,7 @@ class ZanCrewApi {
   // ---------------------------------------------------------------------------
 
   static Future<Map<String, dynamic>> jobCustomerRating(String jobId) async {
-    final res = await http.get(_u("/zancrew/tasks/$jobId/customer_rating"), headers: await _h);
+    final res = await _call((h) => http.get(_u("/zancrew/tasks/$jobId/customer_rating"), headers: h));
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception("Failed to load rating: ${res.body}");

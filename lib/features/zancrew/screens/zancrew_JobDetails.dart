@@ -104,7 +104,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           jobId: widget.jobId,
-          jobTitle: (_job?['task_title'] ?? 'Chat').toString(),
+          jobTitle: (_job?['title'] ?? 'Chat').toString(),
           viewerUserId: viewerUserId,
         ),
       ),
@@ -257,42 +257,15 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
 
   String _priceLabel() {
     final currency = (_job?['currency'] ?? '').toString().toUpperCase();
-
-    // Primary path: INR (paise → rupees)
-    final paise = _job?['estimated_amount_paise'];
-    if (paise != null) {
+    final amount = _job?['estimated_amount'];
+    if (amount != null) {
       try {
-        final p = (paise is num)
-            ? paise.toDouble()
-            : double.parse(paise.toString());
-        final rupees = p / 100.0;
-        final symbol = (currency == 'INR')
-            ? '₹'
-            : (currency == 'GBP')
-            ? '£'
-            : '£';
-        final isWhole = rupees.truncateToDouble() == rupees;
-        return '$symbol${rupees.toStringAsFixed(isWhole ? 0 : 2)} est.';
+        final v = (amount is num) ? amount.toDouble() : double.parse(amount.toString());
+        final symbol = (currency == 'GBP') ? '£' : (currency == 'INR') ? '₹' : '£';
+        final isWhole = v.truncateToDouble() == v;
+        return '$symbol${v.toStringAsFixed(isWhole ? 0 : 2)} est.';
       } catch (_) {}
     }
-
-    // Legacy UK path: pence → pounds
-    final pence = _job?['estimated_cost_pence'];
-    if (pence != null) {
-      try {
-        final p = (pence is num)
-            ? pence.toDouble()
-            : double.parse(pence.toString());
-        final pounds = p / 100.0;
-        final symbol = (currency == 'GBP')
-            ? '£'
-            : (currency == 'INR')
-            ? '₹'
-            : '£';
-        return '$symbol${pounds.toStringAsFixed(2)} est.';
-      } catch (_) {}
-    }
-
     return '';
   }
 
@@ -307,7 +280,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
   }
 
   List<String> _importantNotes() {
-    final n = _job?['important_notes'];
+    final n = _job?['notes'];
     if (n is List) return _strList(n);
     if (n is String && n.trim().isNotEmpty) {
       return n
@@ -1269,7 +1242,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       );
     }
 
-    final title = (_job!['task_title'] ?? '').toString();
+    final title = (_job!['title'] ?? '').toString();
     final desc = (_job!['polished_task'] ?? '').toString();
     final addr = (_job!['location_address'] ?? '').toString();
     final when = _whenLabel();

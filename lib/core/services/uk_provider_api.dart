@@ -7,9 +7,8 @@ class UkProviderApi {
   static String get _base => ApiService.baseUrl;
 
   static Future<Map<String, dynamic>?> getStatus(String userId) async {
-    final res = await http.get(
-      Uri.parse('$_base/uk/provider/status/$userId'),
-      headers: await ApiService.authHeaders(),
+    final res = await ApiService.callWithRefresh(
+      (h) => http.get(Uri.parse('$_base/uk/provider/status/$userId'), headers: h),
     );
     if (res.statusCode == 404) return null;
     if (res.statusCode == 200) {
@@ -39,10 +38,12 @@ class UkProviderApi {
     if (addressOrPostcode != null) body['address_or_postcode'] = addressOrPostcode;
     if (shareCode != null) body['share_code'] = shareCode;
 
-    final res = await http.post(
-      Uri.parse('$_base/uk/provider/apply'),
-      headers: await ApiService.authHeaders(),
-      body: jsonEncode(body),
+    final res = await ApiService.callWithRefresh(
+      (h) => http.post(
+        Uri.parse('$_base/uk/provider/apply'),
+        headers: h,
+        body: jsonEncode(body),
+      ),
     );
 
     if (res.statusCode == 200 || res.statusCode == 201) {
