@@ -260,8 +260,14 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
     final amount = _job?['estimated_amount'];
     if (amount != null) {
       try {
-        final v = (amount is num) ? amount.toDouble() : double.parse(amount.toString());
-        final symbol = (currency == 'GBP') ? '£' : (currency == 'INR') ? '₹' : '£';
+        final v = (amount is num)
+            ? amount.toDouble()
+            : double.parse(amount.toString());
+        final symbol = (currency == 'GBP')
+            ? '£'
+            : (currency == 'INR')
+            ? '₹'
+            : '£';
         final isWhole = v.truncateToDouble() == v;
         return '$symbol${v.toStringAsFixed(isWhole ? 0 : 2)} est.';
       } catch (_) {}
@@ -364,14 +370,14 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Ask the customer for the 4-digit Start PIN.',
+                      'Ask the customer for the 6-digit Start PIN.',
                       style: TextStyle(color: _muted),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: controller,
                       decoration: InputDecoration(
-                        hintText: '4-digit PIN',
+                        hintText: '6-digit PIN',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -380,7 +386,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                         errorText: errorText,
                       ),
                       keyboardType: TextInputType.number,
-                      maxLength: 4,
+                      maxLength: 6,
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -451,14 +457,14 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Ask the customer for the 4-digit End PIN to complete the job.',
+                      'Ask the customer for the 6-digit End PIN to complete the job.',
                       style: TextStyle(color: _muted),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: controller,
                       decoration: InputDecoration(
-                        hintText: '4-digit PIN',
+                        hintText: '6-digit PIN',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -467,7 +473,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                         errorText: errorText,
                       ),
                       keyboardType: TextInputType.number,
-                      maxLength: 4,
+                      maxLength: 6,
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -1064,9 +1070,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Need help?',
           style: TextStyle(fontWeight: FontWeight.w800),
