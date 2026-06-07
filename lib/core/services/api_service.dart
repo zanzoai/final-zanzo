@@ -327,13 +327,13 @@ class ApiService {
   }
 
   static Future<http.Response> getOfferDetail(String offerId) async {
-    final res = await _get(_u('/zancrew/offers/$offerId'));
+    final res = await _get(_u('/zancrew/offers/$offerId'), headers: await authHeaders());
     _log('offer.detail', 'id=$offerId body=${_truncate(res.body, max: 600)}');
     return res;
   }
 
   static Future<Map<String, dynamic>> acceptOffer(String offerId) async {
-    final res = await _post(_u('/zancrew/offers/$offerId/accept'), {});
+    final res = await _post(_u('/zancrew/offers/$offerId/accept'), {}, headers: await authHeaders());
     if (res.statusCode != 200) {
       throw HttpException(
         'POST /zancrew/offers/{id}/accept failed: '
@@ -344,7 +344,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> rejectOffer(String offerId) async {
-    final res = await _post(_u('/zancrew/offers/$offerId/reject'), {});
+    final res = await _post(_u('/zancrew/offers/$offerId/reject'), {}, headers: await authHeaders());
     if (res.statusCode != 200) {
       throw HttpException(
         'POST /zancrew/offers/{id}/reject failed: '
