@@ -116,15 +116,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   void _initFcmOpenListeners() {
     // Notification tapped while app was in background
-    _fcmOpenedSub = FirebaseMessaging.onMessageOpenedApp.listen(
-      (message) {
-        debugPrint('[FCM] notification opened app — refreshing offers');
-        if (_online && _crewUserId != null) {
-          _refreshOffers(status: 'offered');
-        }
-      },
-      onError: (e) => debugPrint('[FCM] onMessageOpenedApp error: $e'),
-    );
+    _fcmOpenedSub = FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      debugPrint('[FCM] notification opened app — refreshing offers');
+      if (_online && _crewUserId != null) {
+        _refreshOffers(status: 'offered');
+      }
+    }, onError: (e) => debugPrint('[FCM] onMessageOpenedApp error: $e'));
 
     // Notification tapped when app was fully terminated (cold start)
     FirebaseMessaging.instance.getInitialMessage().then((message) {
@@ -207,15 +204,18 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   /// Set up the token-refresh listener once per dashboard session.
   void _initFcmRefreshListener() {
     _fcmRefreshSub?.cancel();
-    _fcmRefreshSub = FirebaseMessaging.instance.onTokenRefresh.listen(
-      (newToken) async {
-        final prefix = newToken.length >= 8 ? newToken.substring(0, 8) : '???';
-        debugPrint('[FCM] token refreshed token=$prefix…');
-        final platform = Platform.isIOS ? 'ios' : Platform.isAndroid ? 'android' : 'unknown';
-        await ApiService.registerDeviceToken(token: newToken, platform: platform);
-      },
-      onError: (e) => debugPrint('[FCM] onTokenRefresh error: $e'),
-    );
+    _fcmRefreshSub = FirebaseMessaging.instance.onTokenRefresh.listen((
+      newToken,
+    ) async {
+      final prefix = newToken.length >= 8 ? newToken.substring(0, 8) : '???';
+      debugPrint('[FCM] token refreshed token=$prefix…');
+      final platform = Platform.isIOS
+          ? 'ios'
+          : Platform.isAndroid
+          ? 'android'
+          : 'unknown';
+      await ApiService.registerDeviceToken(token: newToken, platform: platform);
+    }, onError: (e) => debugPrint('[FCM] onTokenRefresh error: $e'));
   }
 
   /// Request notification permission (iOS shows system dialog; Android 13+ also shows dialog).
@@ -246,11 +246,15 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         for (int i = 0; i < 5; i++) {
           apns = await FirebaseMessaging.instance.getAPNSToken();
           if (apns != null) break;
-          debugPrint('[FCM] APNS token not ready, attempt ${i + 1}/5 — retrying in 1s…');
+          debugPrint(
+            '[FCM] APNS token not ready, attempt ${i + 1}/5 — retrying in 1s…',
+          );
           await Future.delayed(const Duration(seconds: 1));
         }
         if (apns == null) {
-          debugPrint('[FCM] APNS token still null after 5 attempts — skipping FCM registration');
+          debugPrint(
+            '[FCM] APNS token still null after 5 attempts — skipping FCM registration',
+          );
           return;
         }
         final apnsPrefix = apns.length >= 8 ? apns.substring(0, 8) : '???';
@@ -264,7 +268,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       }
       final prefix = token.length >= 8 ? token.substring(0, 8) : '???';
       debugPrint('[FCM] got token=$prefix…');
-      final platform = Platform.isIOS ? 'ios' : Platform.isAndroid ? 'android' : 'unknown';
+      final platform = Platform.isIOS
+          ? 'ios'
+          : Platform.isAndroid
+          ? 'android'
+          : 'unknown';
       await ApiService.registerDeviceToken(token: token, platform: platform);
     } catch (e) {
       debugPrint('[FCM] _registerCurrentFcmToken error: $e');
@@ -422,11 +430,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       if (mounted) {
         setState(() => _online = !v);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e.toString().replaceFirst('Exception: ', ''),
-            ),
-          ),
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
         );
       }
     }
@@ -447,7 +451,9 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       Position? pos = await Geolocator.getLastKnownPosition();
 
       if (pos == null) {
-        debugPrint('[ZanCrew] no last known position — trying current (medium)');
+        debugPrint(
+          '[ZanCrew] no last known position — trying current (medium)',
+        );
         pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.medium,
         ).timeout(const Duration(seconds: 20));
@@ -463,7 +469,9 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         return;
       }
 
-      debugPrint('[ZanCrew] pre-online location: ${pos.latitude},${pos.longitude}');
+      debugPrint(
+        '[ZanCrew] pre-online location: ${pos.latitude},${pos.longitude}',
+      );
       await ApiService.postCrewLocationUpdate(
         crewUserId: _crewUserId!,
         lat: pos.latitude,
@@ -1215,7 +1223,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
               .toLowerCase();
           final isAccepted = offerStatus == 'accepted';
 
-          final jobId = (o['job_id'] ?? '').toString();
+          final jobId = (o['task_id'] ?? o['job_id'] ?? '').toString();
 
           return InkWell(
             borderRadius: BorderRadius.circular(16),

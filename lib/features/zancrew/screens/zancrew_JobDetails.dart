@@ -327,6 +327,8 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       ).showSnackBar(SnackBar(content: Text('Marked as ${_pretty(status)}')));
 
       await _loadJob();
+      // Force status — Redis may serve stale data for up to 60s after event POST
+      if (mounted && _job != null) setState(() => _job!['status'] = status);
 
       // notify earnings screen it should refresh
       if (status == 'completed') {
@@ -424,6 +426,8 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             const SnackBar(content: Text('Start PIN verified — job started')),
           );
           await _loadJob();
+          if (mounted && _job != null)
+            setState(() => _job!['status'] = 'in_progress');
           return; // success → exit loop
         } catch (_) {
           errorText = "Wrong PIN, please try again";
@@ -511,6 +515,8 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             const SnackBar(content: Text('End PIN verified — job completed ✅')),
           );
           await _loadJob();
+          if (mounted && _job != null)
+            setState(() => _job!['status'] = 'completed');
           Navigator.of(context).pop(true);
           return; // success → exit loop
         } catch (_) {
