@@ -228,12 +228,15 @@ class ApiService {
     }
   }
 
-  static Future<http.Response> getJob(String jobId) {
-    return _get(_u('/tasks/$jobId'));
+  static Future<http.Response> getJob(String jobId) async {
+    return _get(_u('/tasks/$jobId'), headers: await authHeaders());
   }
 
   static Future<Map<String, dynamic>> getJobSession(String jobId) async {
-    final res = await _get(_u('/tasks/$jobId/otp'));
+    final res = await _get(
+      _u('/tasks/$jobId/otp'),
+      headers: await authHeaders(),
+    );
     if (res.statusCode != 200) {
       throw HttpException(
         'GET /tasks/$jobId/otp failed: ${res.statusCode} ${res.body}',
@@ -247,7 +250,9 @@ class ApiService {
   }
 
   static Future<void> postSessionStart(String jobId, String pin) async {
-    final res = await _post(_u('/tasks/$jobId/verify-start-otp'), {"otp": pin});
+    final res = await _post(_u('/tasks/$jobId/verify-start-otp'), {
+      "otp": pin,
+    }, headers: await authHeaders());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
         'POST /tasks/$jobId/verify-start-otp failed: '
@@ -257,7 +262,9 @@ class ApiService {
   }
 
   static Future<void> postSessionEnd(String jobId, String pin) async {
-    final res = await _post(_u('/tasks/$jobId/verify-end-otp'), {"otp": pin});
+    final res = await _post(_u('/tasks/$jobId/verify-end-otp'), {
+      "otp": pin,
+    }, headers: await authHeaders());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
         'POST /tasks/$jobId/verify-end-otp failed: '
@@ -275,12 +282,9 @@ class ApiService {
     String status = 'offered',
     int limit = 20,
   }) async {
-    final url = Uri.parse('$baseUrl/zancrew/offers').replace(
-      queryParameters: {
-        'status': status,
-        'limit': '$limit',
-      },
-    );
+    final url = Uri.parse(
+      '$baseUrl/zancrew/offers',
+    ).replace(queryParameters: {'status': status, 'limit': '$limit'});
 
     final res = await _get(url, headers: await authHeaders());
     if (res.statusCode != 200) {
@@ -327,13 +331,20 @@ class ApiService {
   }
 
   static Future<http.Response> getOfferDetail(String offerId) async {
-    final res = await _get(_u('/zancrew/offers/$offerId'), headers: await authHeaders());
+    final res = await _get(
+      _u('/zancrew/offers/$offerId'),
+      headers: await authHeaders(),
+    );
     _log('offer.detail', 'id=$offerId body=${_truncate(res.body, max: 600)}');
     return res;
   }
 
   static Future<Map<String, dynamic>> acceptOffer(String offerId) async {
-    final res = await _post(_u('/zancrew/offers/$offerId/accept'), {}, headers: await authHeaders());
+    final res = await _post(
+      _u('/zancrew/offers/$offerId/accept'),
+      {},
+      headers: await authHeaders(),
+    );
     if (res.statusCode != 200) {
       throw HttpException(
         'POST /zancrew/offers/{id}/accept failed: '
@@ -344,7 +355,11 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> rejectOffer(String offerId) async {
-    final res = await _post(_u('/zancrew/offers/$offerId/reject'), {}, headers: await authHeaders());
+    final res = await _post(
+      _u('/zancrew/offers/$offerId/reject'),
+      {},
+      headers: await authHeaders(),
+    );
     if (res.statusCode != 200) {
       throw HttpException(
         'POST /zancrew/offers/{id}/reject failed: '
