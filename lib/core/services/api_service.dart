@@ -461,6 +461,59 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // SET USER LOCATION  (geolocation / country routing)
+  // ---------------------------------------------------------------------------
+
+  // POST /users/set-location  →  { lat, lng }
+  // Reverse-geocodes on the backend, persists country_code, and returns a
+  // refreshed JWT with country_code embedded.  Skipped silently if no token.
+  static Future<Map<String, dynamic>?> setUserLocation({
+    required double lat,
+    required double lng,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token == null || token.isEmpty) {
+      _log('setUserLocation', '⚠️ skipped — no access_token');
+      return null;
+    }
+
+    try {
+      final res = await callWithRefresh(
+        (h) => _post(
+          _u('/users/set-location'),
+          {'lat': lat, 'lng': lng},
+          headers: h,
+          timeout: const Duration(seconds: 12),
+        ),
+      );
+
+      if (res.statusCode != 200) {
+        _log('setUserLocation', '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}');
+        return null;
+      }
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+
+      final newToken = body['access_token']?.toString();
+      final countryCode = body['country_code']?.toString();
+
+      if (newToken != null && newToken.isNotEmpty) {
+        await prefs.setString('access_token', newToken);
+      }
+      if (countryCode != null && countryCode.isNotEmpty) {
+        await prefs.setString('country_code', countryCode);
+      }
+
+      _log('setUserLocation', '✅ country_code=$countryCode');
+      return body;
+    } catch (e, st) {
+      _log('setUserLocation', '❌ error: $e\n$st');
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // AUTH (EMAIL + PHONE)
   // ---------------------------------------------------------------------------
 

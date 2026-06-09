@@ -126,7 +126,7 @@ class ZanCrewApi {
       (h) => http.post(
         _u("/zancrew/set_online"),
         headers: h,
-        body: jsonEncode({"user_id": userId, "online": online}),
+        body: jsonEncode({"online": online}),
       ),
     );
 
