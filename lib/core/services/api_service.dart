@@ -16,8 +16,10 @@ class ApiService {
   // static const String baseUrl =
   //     "https://zanzo-uk-backend-production.up.railway.app/api/v1";
 
+  //  "https://zanzo-uk-backend-production-b2d0.up.railway.app/api/v1";
+
   static const String baseUrl =
-      "https://zanzo-uk-backend-production-b2d0.up.railway.app/api/v1";
+      "https://test-geo-location-production.up.railway.app/api/v1";
 
   /// Backend base URL (LAN/IP for local device testing)
   // static const String baseUrl = "http://192.168.193.93:8000";
@@ -489,7 +491,10 @@ class ApiService {
       );
 
       if (res.statusCode != 200) {
-        _log('setUserLocation', '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}');
+        _log(
+          'setUserLocation',
+          '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}',
+        );
         return null;
       }
 
