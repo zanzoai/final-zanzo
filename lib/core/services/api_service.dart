@@ -944,6 +944,28 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // CREW EARNINGS
+  // ---------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> getCrewEarnings() async {
+    final res = await callWithRefresh(
+      (h) => _get(_u('/zancrew/earnings'), headers: h),
+    );
+    if (res.statusCode != 200) {
+      throw HttpException(
+        'GET /zancrew/earnings failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      throw const HttpException('Unexpected earnings payload shape');
+    } catch (e) {
+      throw HttpException('GET /zancrew/earnings JSON decode failed: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // UTILS
   // ---------------------------------------------------------------------------
 
