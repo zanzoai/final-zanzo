@@ -8,7 +8,9 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -156,6 +158,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
+    _registerFcmTokenIfLoggedIn();
     _loadUser();
     _loadZancrewFromPrefs();
     _backgroundSyncZanCrew();
@@ -200,6 +203,20 @@ class _HomeScreenState extends State<HomeScreen>
   // ---------------------------------------------------------------------------
   // LOAD USER FROM PREFS
   // ---------------------------------------------------------------------------
+
+  Future<void> _registerFcmTokenIfLoggedIn() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString('access_token');
+      if (accessToken == null || accessToken.isEmpty) return;
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null) return;
+      final platform = Platform.isIOS ? 'ios' : 'android';
+      await ApiService.registerDeviceToken(token: token, platform: platform);
+    } catch (e) {
+      debugPrint('[FCM] customer token registration error: $e');
+    }
+  }
 
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
