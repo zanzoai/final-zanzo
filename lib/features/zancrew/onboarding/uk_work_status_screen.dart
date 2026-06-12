@@ -53,16 +53,16 @@ class UkWorkStatusScreen extends StatelessWidget {
                 requiresShareCode: true,
               ),
               _StatusTile(
+                title: 'Student Visa',
+                subtitle: 'Share your details — we\'ll keep them ready for when a student route launches.',
+                value: 'student_visa',
+                requiresShareCode: true,
+              ),
+              _StatusTile(
                 title: 'Other visa / I\'m not sure',
                 subtitle: 'Choose this if you need help proving your right to work.',
                 value: 'unknown',
                 requiresShareCode: false,
-              ),
-              _StatusTile(
-                title: 'Student Visa',
-                subtitle: 'Provide your details — we\'ll notify you when a student route opens.',
-                value: 'student_visa',
-                requiresShareCode: true,
               ),
             ],
           ),

@@ -113,12 +113,24 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
 
       if (providerStatus == 'rejected') {
         if (holdStatuses.contains(declaredStatus)) {
-          final msg = result['message'] as String? ??
-              result['rejection_reason'] as String?;
+          final String holdMsg;
+          switch (declaredStatus) {
+            case 'student_visa':
+              holdMsg =
+                  'Your details have been received. Our team will review your route and notify you when a suitable student route becomes available.';
+              break;
+            case 'skilled_worker_or_other':
+              holdMsg =
+                  'Your details have been received. We\'ll review your work route and let you know when paid ZanCrew tasks become available.';
+              break;
+            default:
+              holdMsg =
+                  'Your details have been received. We may need more information before paid tasks can be enabled. We\'ll notify you when your route is ready.';
+          }
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => UkHoldScreen(reason: msg),
+              builder: (_) => UkHoldScreen(reason: holdMsg),
             ),
           );
         } else {
