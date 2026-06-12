@@ -259,10 +259,12 @@ class VerificationApi {
   ) async {
     try {
       final profile = await ZanCrewApi.getProfile(userId);
-      final buckets = (profile?['buckets'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [];
+      final bucketsRaw = profile?['buckets'];
+      final buckets = bucketsRaw is List
+          ? List<String>.from(bucketsRaw.map((e) => e.toString()))
+          : bucketsRaw is String && bucketsRaw.isNotEmpty
+              ? bucketsRaw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+              : <String>[];
 
       final radiusKm =
           (profile?['radius_km'] as num?)?.toInt() ?? 5;

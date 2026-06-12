@@ -46,7 +46,15 @@ class _ZanCrewReviewState extends State<ZanCrewReview> {
       await prefs.setBool('zancrew_kyc_verified', p['kyc_verified'] as bool);
     }
 
-    if (p['buckets'] is List) {
+    if (p['buckets'] is String) {
+      final raw = p['buckets'] as String;
+      if (raw.isNotEmpty) {
+        await prefs.setStringList(
+          'zancrew_buckets',
+          raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+        );
+      }
+    } else if (p['buckets'] is List) {
       await prefs.setStringList(
         'zancrew_buckets',
         (p['buckets'] as List).cast<String>(),
@@ -117,7 +125,12 @@ class _ZanCrewReviewState extends State<ZanCrewReview> {
     final p = _profile ?? {};
 
     final status = (p['status'] as String? ?? 'pending').toLowerCase();
-    final buckets = (p['buckets'] as List?)?.cast<String>() ?? const <String>[];
+    final bucketsRaw = p['buckets'];
+    final buckets = bucketsRaw is List
+        ? List<String>.from(bucketsRaw)
+        : bucketsRaw is String && bucketsRaw.isNotEmpty
+            ? bucketsRaw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+            : const <String>[];
     final radiusKm = (p['radius_km'] as num?)?.toInt() ?? 0;
     final bankVerified = (p['bank_verified'] as bool?) ?? false;
     final kycVerified = (p['kyc_verified'] as bool?) ?? false;

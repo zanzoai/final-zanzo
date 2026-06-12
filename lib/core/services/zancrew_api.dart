@@ -26,7 +26,7 @@ class ZanCrewApi {
   }) async {
     final body = {
       "user_id": userId,
-      "buckets": buckets,
+      "buckets": buckets.join(","),
       "radius_km": radiusKm,
       "status": status ?? "pending",
     };
