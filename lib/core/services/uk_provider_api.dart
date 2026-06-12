@@ -26,6 +26,10 @@ class UkProviderApi {
     String? addressOrPostcode,
     String? shareCode,
     required bool termsAgreed,
+    String? universityName,
+    String? courseName,
+    String? visaExpiryDate,
+    String? applicantNotes,
   }) async {
     final body = <String, dynamic>{
       'user_id': userId,
@@ -37,6 +41,10 @@ class UkProviderApi {
     if (phone != null) body['phone'] = phone;
     if (addressOrPostcode != null) body['address_or_postcode'] = addressOrPostcode;
     if (shareCode != null) body['share_code'] = shareCode;
+    if (universityName != null) body['university_name'] = universityName;
+    if (courseName != null) body['course_name'] = courseName;
+    if (visaExpiryDate != null) body['visa_expiry_date'] = visaExpiryDate;
+    if (applicantNotes != null) body['applicant_notes'] = applicantNotes;
 
     final res = await ApiService.callWithRefresh(
       (h) => http.post(
