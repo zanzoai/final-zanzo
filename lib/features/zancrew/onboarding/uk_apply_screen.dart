@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/uk_provider_api.dart';
+import 'uk_document_upload_screen.dart';
 import 'uk_hold_screen.dart';
 import 'uk_pending_screen.dart';
 import 'uk_rejected_screen.dart';
@@ -145,6 +146,11 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
             ),
           );
         }
+      } else if (widget.workStatus == 'british_irish') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const UkDocumentUploadScreen()),
+        );
       } else {
         Navigator.pushReplacement(
           context,

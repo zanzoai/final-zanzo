@@ -1,6 +1,8 @@
 // lib/core/services/uk_provider_api.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 
 class UkProviderApi {
@@ -59,5 +61,33 @@ class UkProviderApi {
     }
     final err = jsonDecode(res.body) as Map<String, dynamic>?;
     throw Exception(err?['detail'] ?? 'Application failed (${res.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> uploadDocument({
+    required String documentType,
+    required File file,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token == null || token.isEmpty) throw Exception('Not signed in');
+
+    final uri = Uri.parse('$_base/uk/provider/documents/upload')
+        .replace(queryParameters: {'document_type': documentType});
+
+    final req = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+    final streamed = await req.send();
+    final res = await http.Response.fromStream(streamed);
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    Map<String, dynamic>? err;
+    try {
+      err = jsonDecode(res.body) as Map<String, dynamic>?;
+    } catch (_) {}
+    throw Exception(err?['detail'] ?? 'Upload failed (${res.statusCode})');
   }
 }
