@@ -100,4 +100,44 @@ class UkProviderApi {
     } catch (_) {}
     throw Exception(err?['detail'] ?? 'Upload failed (${res.statusCode})');
   }
+
+  static Future<Map<String, dynamic>> getBankDetails() async {
+    final res = await ApiService.callWithRefresh(
+      (h) => http.get(Uri.parse('$_base/uk/bank-details'), headers: h),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get bank details (${res.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> saveBankDetails({
+    required String accountHolderName,
+    required String sortCode,
+    required String accountNumber,
+    String? bankName,
+  }) async {
+    final body = <String, dynamic>{
+      'account_holder_name': accountHolderName,
+      'sort_code': sortCode,
+      'account_number': accountNumber,
+      'details_confirmed': true,
+      if (bankName != null && bankName.isNotEmpty) 'bank_name': bankName,
+    };
+    final res = await ApiService.callWithRefresh(
+      (h) => http.post(
+        Uri.parse('$_base/uk/bank-details'),
+        headers: h,
+        body: jsonEncode(body),
+      ),
+    );
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    Map<String, dynamic>? err;
+    try {
+      err = jsonDecode(res.body) as Map<String, dynamic>?;
+    } catch (_) {}
+    throw Exception(err?['detail'] ?? 'Failed to save bank details (${res.statusCode})');
+  }
 }

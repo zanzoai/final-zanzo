@@ -25,6 +25,7 @@ import 'package:zanzo_frontend/core/services/zancrew_earnings_service.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/uk_provider_api.dart';
 import '../../../core/services/zancrew_api.dart';
+import '../onboarding/uk_bank_details_screen.dart';
 import '../screens/zancrew_JobDetails.dart';
 import '../screens/zancrew_earnings_details.dart';
 import '../screens/zancrew_offer_detail.dart';
@@ -951,6 +952,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
             },
           ),
           actions: [
+            IconButton(
+              tooltip: 'Bank Details',
+              icon: const Icon(Icons.account_balance_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const UkBankDetailsScreen(),
+                ),
+              ),
+            ),
             IconButton(
               tooltip: 'Preferences',
               icon: const Icon(Icons.tune),
