@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 
@@ -74,9 +75,18 @@ class UkProviderApi {
     final uri = Uri.parse('$_base/uk/provider/documents/upload')
         .replace(queryParameters: {'document_type': documentType});
 
+    final lowerPath = file.path.toLowerCase();
+    final mediaType = lowerPath.endsWith('.png')
+        ? MediaType('image', 'png')
+        : MediaType('image', 'jpeg');
+
     final req = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $token'
-      ..files.add(await http.MultipartFile.fromPath('file', file.path));
+      ..files.add(await http.MultipartFile.fromPath(
+        'file',
+        file.path,
+        contentType: mediaType,
+      ));
 
     final streamed = await req.send();
     final res = await http.Response.fromStream(streamed);
