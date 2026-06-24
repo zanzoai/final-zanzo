@@ -17,7 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // Core
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/services/auth.dart';
-import 'package:zanzo_frontend/core/services/voice_ws_service.dart';
+import 'package:zanzo_frontend/core/services/speech_service.dart';
 import 'package:zanzo_frontend/core/services/zancrew_api.dart';
 // User feature
 import 'package:zanzo_frontend/features/user/screens/profile_screen.dart';
@@ -48,7 +48,10 @@ class _HomeScreenState extends State<HomeScreen>
   // VOICE SERVICE
   // ---------------------------------------------------------------------------
 
-  late final VoiceWsService _voice = VoiceWsService();
+  late final SpeechService _voice = SpeechService();
+
+  // Text already in box when mic is tapped — used to prepend recognised speech.
+  String _preRecordText = '';
 
   // ---------------------------------------------------------------------------
   // USER / PREFS
@@ -168,24 +171,46 @@ class _HomeScreenState extends State<HomeScreen>
     // Sync UI with mic events
     _controller.addListener(() => setState(() {}));
 
-    // Voice → append final text only (manual-final mode)
+    // Warm-up: request permission early so the first tap is instant.
+    _voice.initialize();
+
+    // Voice listener — handles both live partial preview and final commit.
     _voice.addListener(() {
       if (!mounted) return;
 
-      if (!_voice.isRecording &&
-          !_voice.isTranscribing &&
-          _voice.finalText.trim().isNotEmpty) {
-        final spoken = _voice.finalText.trim();
-        final existing = _controller.text.trim();
-
-        _controller.text = existing.isEmpty ? spoken : "$existing $spoken";
-
-        _controller.selection = TextSelection.fromPosition(
-          TextPosition(offset: _controller.text.length),
-        );
-
-        _voice.clearText(); // avoid re-append
+      if (_voice.isRecording) {
+        // Live partial: update text box as the user speaks.
+        if (_voice.partialText.isNotEmpty) {
+          final base = _preRecordText.trim();
+          _controller.text = base.isEmpty
+              ? _voice.partialText
+              : '$base ${_voice.partialText}';
+          _controller.selection = TextSelection.fromPosition(
+            TextPosition(offset: _controller.text.length),
+          );
+        }
+      } else {
+        // Recording stopped.
+        if (_voice.finalText.trim().isNotEmpty) {
+          // Commit the recognised speech.
+          final base = _preRecordText.trim();
+          final spoken = _voice.finalText.trim();
+          _controller.text = base.isEmpty ? spoken : '$base $spoken';
+          _controller.selection = TextSelection.fromPosition(
+            TextPosition(offset: _controller.text.length),
+          );
+          _voice.clearText();
+          _preRecordText = '';
+        } else if (_preRecordText.isNotEmpty) {
+          // Nothing was recognised — restore what was there before.
+          _controller.text = _preRecordText;
+          _controller.selection = TextSelection.fromPosition(
+            TextPosition(offset: _controller.text.length),
+          );
+          _preRecordText = '';
+        }
       }
+
       setState(() {});
     });
   }
@@ -309,11 +334,25 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _toggleVoice() async {
     if (_voice.isRecording) {
-      await _voice.stop(); // triggers transcribing & append later
+      await _voice.stop();
       setState(() {});
       return;
     }
-    await _voice.start();
+    // Capture whatever is already typed so we can prepend it to the result.
+    _preRecordText = _controller.text;
+    final ok = await _voice.start();
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Microphone or speech permission denied. '
+            'Please enable it in Settings and try again.',
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
     setState(() {});
   }
 
@@ -629,12 +668,6 @@ class _HomeScreenState extends State<HomeScreen>
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            _MicButton(
-                              isRecording: _voice.isRecording,
-                              isTranscribing: _voice.isTranscribing,
-                              onPressed: _toggleVoice,
-                            ),
-
                             Expanded(
                               child: ConstrainedBox(
                                 constraints: const BoxConstraints(
@@ -660,9 +693,17 @@ class _HomeScreenState extends State<HomeScreen>
                               ),
                             ),
 
+                            // Send arrow — submit the task
                             IconButton(
                               icon: const Icon(Icons.arrow_upward_rounded),
                               onPressed: canSend ? _sendRequest : null,
+                            ),
+
+                            // Mic — right of arrow for natural L→R: type → send → speak
+                            _MicButton(
+                              isRecording: _voice.isRecording,
+                              isTranscribing: _voice.isTranscribing,
+                              onPressed: _toggleVoice,
                             ),
                           ],
                         ),
