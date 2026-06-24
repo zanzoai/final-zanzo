@@ -54,6 +54,7 @@ dependencies:
 
 
   # 🎙️ Voice
+  speech_to_text: ^6.6.0
   web_socket_channel: ^2.4.0
   flutter_sound: ^9.28.0
   camera_camera: ^3.0.0
