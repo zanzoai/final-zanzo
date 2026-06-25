@@ -127,7 +127,6 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
 
     if (widget.jobId != null && widget.jobId!.isNotEmpty) {
       _fetchCurrentStatus();
-      _startRealtime();
       _startPolling();
 
       _loadSession();
@@ -142,31 +141,18 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
 
     setState(() => _loading = true);
     try {
-      final supabase = Supabase.instance.client;
-      final res = await supabase
-          .from('jobs')
-          .select('status')
-          .eq('id', widget.jobId!)
-          .maybeSingle();
-
-      if (res != null) {
-        final st = (res['status'] as String?) ?? '';
+      final res = await ApiService.getJob(widget.jobId!);
+      if (res.statusCode == 200) {
+        final m = json.decode(res.body) as Map<String, dynamic>;
+        final st = (m['status'] as String?) ?? '';
         _updateStageFromStatus(st);
 
-        // One-time fetch duration_hours
-        try {
-          if (_durationMinutes == 0) {
-            final url = Uri.parse("${ApiService.baseUrl}/jobs/${widget.jobId}");
-            final httpRes = await http.get(url, headers: await ApiService.authHeaders());
-            if (httpRes.statusCode == 200) {
-              final m = json.decode(httpRes.body) as Map<String, dynamic>;
-              final d = m['duration_hours'];
-              if (d is num && mounted) {
-                setState(() => _durationMinutes = (d * 60).round());
-              }
-            }
+        if (_durationMinutes == 0) {
+          final d = m['duration_hours'];
+          if (d is num && mounted) {
+            setState(() => _durationMinutes = (d * 60).round());
           }
-        } catch (_) {}
+        }
 
         final norm = _normalize(st);
         if (_isAtOrAfterAssigned(norm)) {
@@ -216,8 +202,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       if (!mounted || widget.jobId == null || widget.jobId!.isEmpty) return;
 
       try {
-        final url = Uri.parse("${ApiService.baseUrl}/jobs/${widget.jobId}");
-        final res = await http.get(url, headers: await ApiService.authHeaders());
+        final res = await ApiService.getJob(widget.jobId!);
         if (res.statusCode == 200) {
           final data = json.decode(res.body) as Map<String, dynamic>;
           final status = (data['status'] as String?) ?? '';
@@ -252,7 +237,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
 
     try {
       final url = Uri.parse(
-        "${ApiService.baseUrl}/zancrew/jobs/${widget.jobId}/assignee",
+        "${ApiService.baseUrl}/zancrew/tasks/${widget.jobId}/assignee",
       );
       final res = await http.get(url, headers: await ApiService.authHeaders());
 
@@ -268,7 +253,9 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
           };
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[track] assignee fetch error: $e');
+    }
   }
 
   Future<String?> _resolveViewerUserId() async {
@@ -359,7 +346,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       final res = await http.post(
         Uri.parse('${ApiService.baseUrl}/payments/cancel'),
         headers: await ApiService.authHeaders(),
-        body: jsonEncode({'job_id': widget.jobId}),
+        body: jsonEncode({'task_id': widget.jobId}),
       );
       if (!mounted) return;
       if (res.statusCode >= 200 && res.statusCode < 300) {

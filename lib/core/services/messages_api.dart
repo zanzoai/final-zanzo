@@ -82,12 +82,12 @@ class MessagesApi {
   // ---------------------------
 
   static Future<List<ChatMessage>> listByJob(String jobId) async {
-    final uri = Uri.parse('${ApiService.baseUrl}/messages/by-job/$jobId');
+    final uri = Uri.parse('${ApiService.baseUrl}/messages/by-task/$jobId');
 
     final res = await http.get(uri, headers: await ApiService.authHeaders());
     if (res.statusCode != 200) {
       throw Exception(
-        'GET /messages/by-job failed: ${res.statusCode} ${res.body}',
+        'GET /messages/by-task failed: ${res.statusCode} ${res.body}',
       );
     }
 
@@ -118,7 +118,7 @@ class MessagesApi {
       uri,
       headers: await ApiService.authHeaders(),
       body: jsonEncode({
-        'job_id': jobId,
+        'task_id': jobId,
         'sender_user_id': senderUserId,
         'content': content,
         'kind': 'text',
@@ -179,7 +179,7 @@ class MessagesApi {
       uri,
       headers: await ApiService.authHeaders(),
       body: jsonEncode({
-        'job_id': jobId,
+        'task_id': jobId,
         'sender_user_id': senderUserId,
         'kind': 'image',
         'content': caption ?? '',

@@ -26,7 +26,7 @@ class UkStudentBlockedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Student visa holders are not permitted to earn as independent providers in the UK MVP.\n\nYou may still use Zanzo as a customer.',
+                "We're not onboarding Student visa holders for paid ZanCrew tasks yet. We're working on a compliant student route and will notify you when this becomes available.",
                 style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
                 textAlign: TextAlign.center,
               ),

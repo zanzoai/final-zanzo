@@ -1,15 +1,17 @@
 // lib/core/services/uk_provider_api.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 
 class UkProviderApi {
   static String get _base => ApiService.baseUrl;
 
   static Future<Map<String, dynamic>?> getStatus(String userId) async {
-    final res = await http.get(
-      Uri.parse('$_base/uk/provider/status/$userId'),
-      headers: await ApiService.authHeaders(),
+    final res = await ApiService.callWithRefresh(
+      (h) => http.get(Uri.parse('$_base/uk/provider/status/$userId'), headers: h),
     );
     if (res.statusCode == 404) return null;
     if (res.statusCode == 200) {
@@ -27,6 +29,10 @@ class UkProviderApi {
     String? addressOrPostcode,
     String? shareCode,
     required bool termsAgreed,
+    String? universityName,
+    String? courseName,
+    String? visaExpiryDate,
+    String? applicantNotes,
   }) async {
     final body = <String, dynamic>{
       'user_id': userId,
@@ -38,11 +44,17 @@ class UkProviderApi {
     if (phone != null) body['phone'] = phone;
     if (addressOrPostcode != null) body['address_or_postcode'] = addressOrPostcode;
     if (shareCode != null) body['share_code'] = shareCode;
+    if (universityName != null) body['university_name'] = universityName;
+    if (courseName != null) body['course_name'] = courseName;
+    if (visaExpiryDate != null) body['visa_expiry_date'] = visaExpiryDate;
+    if (applicantNotes != null) body['applicant_notes'] = applicantNotes;
 
-    final res = await http.post(
-      Uri.parse('$_base/uk/provider/apply'),
-      headers: await ApiService.authHeaders(),
-      body: jsonEncode(body),
+    final res = await ApiService.callWithRefresh(
+      (h) => http.post(
+        Uri.parse('$_base/uk/provider/apply'),
+        headers: h,
+        body: jsonEncode(body),
+      ),
     );
 
     if (res.statusCode == 200 || res.statusCode == 201) {
@@ -50,5 +62,82 @@ class UkProviderApi {
     }
     final err = jsonDecode(res.body) as Map<String, dynamic>?;
     throw Exception(err?['detail'] ?? 'Application failed (${res.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> uploadDocument({
+    required String documentType,
+    required File file,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token == null || token.isEmpty) throw Exception('Not signed in');
+
+    final uri = Uri.parse('$_base/uk/provider/documents/upload')
+        .replace(queryParameters: {'document_type': documentType});
+
+    final lowerPath = file.path.toLowerCase();
+    final mediaType = lowerPath.endsWith('.png')
+        ? MediaType('image', 'png')
+        : MediaType('image', 'jpeg');
+
+    final req = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(await http.MultipartFile.fromPath(
+        'file',
+        file.path,
+        contentType: mediaType,
+      ));
+
+    final streamed = await req.send();
+    final res = await http.Response.fromStream(streamed);
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    Map<String, dynamic>? err;
+    try {
+      err = jsonDecode(res.body) as Map<String, dynamic>?;
+    } catch (_) {}
+    throw Exception(err?['detail'] ?? 'Upload failed (${res.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> getBankDetails() async {
+    final res = await ApiService.callWithRefresh(
+      (h) => http.get(Uri.parse('$_base/uk/bank-details'), headers: h),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get bank details (${res.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> saveBankDetails({
+    required String accountHolderName,
+    required String sortCode,
+    required String accountNumber,
+    String? bankName,
+  }) async {
+    final body = <String, dynamic>{
+      'account_holder_name': accountHolderName,
+      'sort_code': sortCode,
+      'account_number': accountNumber,
+      'details_confirmed': true,
+      if (bankName != null && bankName.isNotEmpty) 'bank_name': bankName,
+    };
+    final res = await ApiService.callWithRefresh(
+      (h) => http.post(
+        Uri.parse('$_base/uk/bank-details'),
+        headers: h,
+        body: jsonEncode(body),
+      ),
+    );
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    Map<String, dynamic>? err;
+    try {
+      err = jsonDecode(res.body) as Map<String, dynamic>?;
+    } catch (_) {}
+    throw Exception(err?['detail'] ?? 'Failed to save bank details (${res.statusCode})');
   }
 }

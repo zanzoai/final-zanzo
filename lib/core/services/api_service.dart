@@ -13,14 +13,21 @@ class ApiService {
   // static const String baseUrl =
   //     "https://zanzo-uk-backend-production-4236.up.railway.app";
 
+  // static const String baseUrl =
+  //     "https://zanzo-uk-backend-production.up.railway.app/api/v1";
+
+  //  "https://zanzo-uk-backend-production-b2d0.up.railway.app/api/v1";
+
   static const String baseUrl =
-      "https://zanzo-uk-backend-production.up.railway.app/api/v1";
+      "https://test-geo-location-production.up.railway.app/api/v1";
 
   /// Backend base URL (LAN/IP for local device testing)
   // static const String baseUrl = "http://192.168.193.93:8000";
 
   /// Shared HTTP client
   static final http.Client httpClient = http.Client();
+
+  static bool _refreshing = false;
 
   /// Common JSON headers
   static Map<String, String> get jsonHeaders => const {
@@ -40,6 +47,26 @@ class ApiService {
     final token = prefs.getString('access_token');
     if (token == null || token.isEmpty) return jsonHeaders;
     return {...jsonHeaders, 'Authorization': 'Bearer $token'};
+  }
+
+  /// Runs [request] with current auth headers.
+  /// On 401, refreshes tokens once and retries. Returns original 401 if
+  /// refresh fails or a refresh is already in progress.
+  static Future<http.Response> callWithRefresh(
+    Future<http.Response> Function(Map<String, String> headers) request,
+  ) async {
+    final res = await request(await authHeaders());
+    if (res.statusCode != 401 || _refreshing) return res;
+    _log('auth', '⚠️ 401 — attempting token refresh');
+    _refreshing = true;
+    final ok = await refreshToken();
+    _refreshing = false;
+    if (!ok) {
+      _log('auth', '⚠️ refresh failed — propagating 401');
+      return res;
+    }
+    _log('auth', '✅ refreshed — retrying request');
+    return request(await authHeaders());
   }
 
   static void _log(String tag, Object msg) {
@@ -108,7 +135,7 @@ class ApiService {
     required double latitude,
     required double longitude,
   }) async {
-    final url = _u('/tasks/tasks/process');
+    final url = _u('/tasks/process');
     final payload = {
       'user_input': userInput,
       'latitude': latitude,
@@ -123,11 +150,13 @@ class ApiService {
     print('[API][process_task] body=${jsonEncode(payload)}');
 
     try {
-      final res = await _post(
-        url,
-        payload,
-        headers: await authHeaders(),
-        timeout: const Duration(seconds: 40),
+      final res = await callWithRefresh(
+        (h) => _post(
+          url,
+          payload,
+          headers: h,
+          timeout: const Duration(seconds: 40),
+        ),
       );
 
       // ignore: avoid_print
@@ -136,12 +165,16 @@ class ApiService {
       print('[API][process_task] ← body=${_truncate(res.body)}');
 
       if (res.statusCode != 200) {
-        _log('process_task', '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}');
+        _log(
+          'process_task',
+          '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}',
+        );
         String detail = 'HTTP ${res.statusCode}';
         try {
           final body = jsonDecode(res.body);
           if (body is Map) {
-            detail = body['detail']?.toString() ??
+            detail =
+                body['detail']?.toString() ??
                 body['message']?.toString() ??
                 body['error']?.toString() ??
                 detail;
@@ -177,7 +210,9 @@ class ApiService {
       return {
         "ok": false,
         "error_type": "network",
-        "user_message": e.message.isNotEmpty ? e.message : "No internet connection.",
+        "user_message": e.message.isNotEmpty
+            ? e.message
+            : "No internet connection.",
       };
     } catch (e, st) {
       _log('process_task', '❌ error: $e\n$st');
@@ -198,7 +233,7 @@ class ApiService {
     String note,
     String crewUserId,
   ) async {
-    final url = Uri.parse('$baseUrl/zancrew/jobs/$jobId/events');
+    final url = Uri.parse('$baseUrl/zancrew/tasks/$jobId/events');
 
     final payload = {
       "status": status,
@@ -206,58 +241,58 @@ class ApiService {
       "crew_user_id": crewUserId,
     };
 
-    final res = await http.post(
-      url,
-      headers: await authHeaders(),
-      body: jsonEncode(payload),
+    final res = await callWithRefresh(
+      (h) => httpClient.post(url, headers: h, body: jsonEncode(payload)),
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception(
-        'POST /zancrew/jobs/$jobId/events failed (${res.statusCode}): ${res.body}',
+        'POST /zancrew/tasks/$jobId/events failed (${res.statusCode}): ${res.body}',
       );
     }
   }
 
   static Future<http.Response> getJob(String jobId) {
-    return _get(_u('/jobs/$jobId'));
+    return callWithRefresh((h) => _get(_u('/tasks/$jobId'), headers: h));
   }
 
   static Future<Map<String, dynamic>> getJobSession(String jobId) async {
-    final res = await _get(_u('/tasks/tasks/$jobId/otp'));
+    final res = await callWithRefresh(
+      (h) => _get(_u('/tasks/$jobId/otp'), headers: h),
+    );
     if (res.statusCode != 200) {
       throw HttpException(
-        'GET /tasks/tasks/$jobId/otp failed: ${res.statusCode} ${res.body}',
+        'GET /tasks/$jobId/otp failed: ${res.statusCode} ${res.body}',
       );
     }
     return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
   }
 
   static Future<Map<String, dynamic>> getSessionSummary(String jobId) async {
-    final res = await _get(_u('/jobs/$jobId/session/summary'));
-    if (res.statusCode != 200) {
-      throw HttpException(
-        'GET /jobs/$jobId/session/summary failed: ${res.statusCode} ${res.body}',
-      );
-    }
-    return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+    return {};
   }
 
   static Future<void> postSessionStart(String jobId, String pin) async {
-    final res = await _post(_u('/jobs/$jobId/session/start'), {"pin": pin});
+    final res = await callWithRefresh(
+      (h) =>
+          _post(_u('/tasks/$jobId/verify-start-otp'), {"otp": pin}, headers: h),
+    );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
-        'POST /jobs/$jobId/session/start failed: '
+        'POST /tasks/$jobId/verify-start-otp failed: '
         '${res.statusCode} ${_truncate(res.body)}',
       );
     }
   }
 
   static Future<void> postSessionEnd(String jobId, String pin) async {
-    final res = await _post(_u('/jobs/$jobId/session/end'), {"pin": pin});
+    final res = await callWithRefresh(
+      (h) =>
+          _post(_u('/tasks/$jobId/verify-end-otp'), {"otp": pin}, headers: h),
+    );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
-        'POST /jobs/$jobId/session/end failed: '
+        'POST /tasks/$jobId/verify-end-otp failed: '
         '${res.statusCode} ${_truncate(res.body)}',
       );
     }
@@ -272,15 +307,11 @@ class ApiService {
     String status = 'offered',
     int limit = 20,
   }) async {
-    final url = Uri.parse('$baseUrl/zancrew/offers').replace(
-      queryParameters: {
-        'crew_user_id': crewUserId,
-        'status': status,
-        'limit': '$limit',
-      },
-    );
+    final url = Uri.parse(
+      '$baseUrl/zancrew/offers',
+    ).replace(queryParameters: {'status': status, 'limit': '$limit'});
 
-    final res = await _get(url);
+    final res = await callWithRefresh((h) => _get(url, headers: h));
     if (res.statusCode != 200) {
       throw HttpException(
         'GET /zancrew/offers failed: ${res.statusCode} ${_truncate(res.body)}',
@@ -325,13 +356,17 @@ class ApiService {
   }
 
   static Future<http.Response> getOfferDetail(String offerId) async {
-    final res = await _get(_u('/zancrew/offers/$offerId'));
+    final res = await callWithRefresh(
+      (h) => _get(_u('/zancrew/offers/$offerId'), headers: h),
+    );
     _log('offer.detail', 'id=$offerId body=${_truncate(res.body, max: 600)}');
     return res;
   }
 
   static Future<Map<String, dynamic>> acceptOffer(String offerId) async {
-    final res = await _post(_u('/zancrew/offers/$offerId/accept'), {});
+    final res = await callWithRefresh(
+      (h) => _post(_u('/zancrew/offers/$offerId/accept'), {}, headers: h),
+    );
     if (res.statusCode != 200) {
       throw HttpException(
         'POST /zancrew/offers/{id}/accept failed: '
@@ -342,7 +377,9 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> rejectOffer(String offerId) async {
-    final res = await _post(_u('/zancrew/offers/$offerId/reject'), {});
+    final res = await callWithRefresh(
+      (h) => _post(_u('/zancrew/offers/$offerId/reject'), {}, headers: h),
+    );
     if (res.statusCode != 200) {
       throw HttpException(
         'POST /zancrew/offers/{id}/reject failed: '
@@ -361,13 +398,13 @@ class ApiService {
     int limit = 20,
   }) async {
     final url = Uri.parse(
-      '$baseUrl/zancrew/my_jobs',
-    ).replace(queryParameters: {'crew_user_id': crewUserId, 'limit': '$limit'});
+      '$baseUrl/zancrew/history',
+    ).replace(queryParameters: {'limit': '$limit'});
 
-    final res = await _get(url);
+    final res = await callWithRefresh((h) => _get(url, headers: h));
     if (res.statusCode != 200) {
       throw HttpException(
-        'GET /zancrew/my_jobs failed: ${res.statusCode} ${_truncate(res.body)}',
+        'GET /zancrew/history failed: ${res.statusCode} ${_truncate(res.body)}',
       );
     }
 
@@ -375,16 +412,17 @@ class ApiService {
     try {
       decoded = jsonDecode(res.body);
     } catch (e) {
-      throw HttpException('GET /zancrew/my_jobs JSON decode failed: $e');
+      throw HttpException('GET /zancrew/history JSON decode failed: $e');
     }
 
-    if (decoded is! List) {
-      throw const HttpException('Unexpected my_jobs payload shape');
+    final taskList = (decoded is Map) ? decoded['tasks'] : decoded;
+    if (taskList is! List) {
+      throw const HttpException('Unexpected history payload shape');
     }
 
-    return decoded.map<Map<String, dynamic>>((e) {
+    return taskList.map<Map<String, dynamic>>((e) {
       final m = Map<String, dynamic>.from(e as Map);
-      m['job_id'] = (m['job_id'] ?? '').toString();
+      m['job_id'] = (m['task_id'] ?? '').toString();
       m['status'] = (m['status'] ?? '').toString().toLowerCase();
       return m;
     }).toList();
@@ -399,13 +437,16 @@ class ApiService {
     required double lat,
     required double lng,
   }) async {
-    final payload = {'crew_user_id': crewUserId, 'lat': lat, 'lng': lng};
+    final payload = {'lat': lat, 'lng': lng};
 
     try {
-      final res = await _post(
-        _u('/crew_location/update'),
-        payload,
-        timeout: const Duration(seconds: 8),
+      final res = await callWithRefresh(
+        (h) => _post(
+          _u('/zancrew/crew_location/update'),
+          payload,
+          headers: h,
+          timeout: const Duration(seconds: 8),
+        ),
       );
 
       if (res.statusCode == 200) {
@@ -422,34 +463,90 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // SET USER LOCATION  (geolocation / country routing)
+  // ---------------------------------------------------------------------------
+
+  // POST /users/set-location  →  { lat, lng }
+  // Reverse-geocodes on the backend, persists country_code, and returns a
+  // refreshed JWT with country_code embedded.  Skipped silently if no token.
+  static Future<Map<String, dynamic>?> setUserLocation({
+    required double lat,
+    required double lng,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token == null || token.isEmpty) {
+      _log('setUserLocation', '⚠️ skipped — no access_token');
+      return null;
+    }
+
+    try {
+      final res = await callWithRefresh(
+        (h) => _post(
+          _u('/users/set-location'),
+          {'lat': lat, 'lng': lng},
+          headers: h,
+          timeout: const Duration(seconds: 12),
+        ),
+      );
+
+      if (res.statusCode != 200) {
+        _log(
+          'setUserLocation',
+          '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}',
+        );
+        return null;
+      }
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+
+      final newToken = body['access_token']?.toString();
+      final countryCode = body['country_code']?.toString();
+
+      if (newToken != null && newToken.isNotEmpty) {
+        await prefs.setString('access_token', newToken);
+      }
+      if (countryCode != null && countryCode.isNotEmpty) {
+        await prefs.setString('country_code', countryCode);
+      }
+
+      _log('setUserLocation', '✅ country_code=$countryCode');
+      return body;
+    } catch (e, st) {
+      _log('setUserLocation', '❌ error: $e\n$st');
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // AUTH (EMAIL + PHONE)
   // ---------------------------------------------------------------------------
 
   // POST /auth/auth/send-email-otp  →  { name?, email }
   static Future<http.Response> sendEmailOtp(String email, {String? name}) {
-    return _post(_u('/auth/auth/send-email-otp'), {
+    return _post(_u('/auth/send-email-otp'), {
       'email': email.trim(),
       if (name != null) 'name': name.trim(),
     });
   }
 
-  // POST /auth/auth/verify-email-otp  →  { email, otp }
+  // POST /auth/verify-email-otp  →  { email, otp }
   static Future<http.Response> verifyEmailOtp(String email, String otp) {
-    return _post(_u('/auth/auth/verify-email-otp'), {
+    return _post(_u('/auth/verify-email-otp'), {
       'email': email.trim(),
       'otp': otp.trim(),
     });
   }
 
-  // POST /auth/auth/send-phone-otp  →  { phone }
+  // POST /auth/send-phone-otp  →  { phone }
   static Future<http.Response> sendPhoneOtp(String phoneE164) {
-    return _post(_u('/auth/auth/send-phone-otp'), {'phone': phoneE164.trim()});
+    return _post(_u('/auth/send-phone-otp'), {'phone': phoneE164.trim()});
   }
 
   // POST /auth/auth/verify-phone-otp  →  { phone, code }
   // Stores access_token, refresh_token, user_id, user_phone, user_role in prefs.
   static Future<bool> verifyPhoneOtp(String phoneE164, String code) async {
-    final res = await _post(_u('/auth/auth/verify-phone-otp'), {
+    final res = await _post(_u('/auth/verify-phone-otp'), {
       'phone': phoneE164.trim(),
       'code': code.trim(),
     });
@@ -501,7 +598,214 @@ class ApiService {
     }
   }
 
-  // POST /auth/auth/refresh  →  { refresh_token }
+  static Future<bool> setLocation(double latitude, double longitude) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+
+    if (token == null || token.isEmpty) {
+      _log('setLocation', '⚠️ skipped — no access_token');
+      return false;
+    }
+
+    final res = await _post(
+      _u('/users/set-location'),
+      {'lat': latitude, 'lng': longitude},
+      headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
+    );
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      _log('setLocation', '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}');
+      return false;
+    }
+
+    try {
+      final Map<String, dynamic> body = jsonDecode(res.body);
+      final prefs = await SharedPreferences.getInstance();
+
+      final newAccessToken = body['access_token']?.toString();
+
+      if (newAccessToken == null || newAccessToken.isEmpty) {
+        _log(
+          'setLocation',
+          '❌ access_token missing from set-location response',
+        );
+        return false;
+      }
+
+      // Replace OTP token with geo-aware token
+      await prefs.setString('access_token', newAccessToken);
+
+      final countryCode = body['country_code']?.toString();
+      final region = body['region']?.toString();
+
+      if (countryCode != null && countryCode.isNotEmpty) {
+        await prefs.setString('country_code', countryCode);
+      }
+
+      if (region != null && region.isNotEmpty) {
+        await prefs.setString('region', region);
+      }
+
+      _log(
+        'setLocation',
+        '✅ token replaced country=$countryCode region=$region',
+      );
+
+      return true;
+    } catch (e, st) {
+      _log('setLocation', '❌ parse/save failed: $e\n$st');
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // TASKS — USER
+  // ---------------------------------------------------------------------------
+
+  // GET /tasks/my  →  List[TaskOut]
+  static Future<List<Map<String, dynamic>>> getMyTasks({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final url = _u('/tasks/my').replace(
+      queryParameters: {'limit': '$limit', 'offset': '$offset'},
+    );
+    final res = await callWithRefresh((h) => _get(url, headers: h));
+    if (res.statusCode != 200) {
+      throw HttpException(
+        'GET /tasks/my failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) throw const HttpException('Unexpected tasks/my payload');
+    return decoded.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  // GET /tasks/{task_id}/events  →  List[TaskEventOut]
+  static Future<List<Map<String, dynamic>>> getTaskEvents(String taskId) async {
+    final res = await callWithRefresh(
+      (h) => _get(_u('/tasks/$taskId/events'), headers: h),
+    );
+    if (res.statusCode != 200) {
+      throw HttpException(
+        'GET /tasks/$taskId/events failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) throw const HttpException('Unexpected task events payload');
+    return decoded.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  // GET /tasks/calculate-cost/{duration_hours}?country=UK
+  static Future<Map<String, dynamic>?> calculateCost(
+    double durationHours, {
+    String country = 'UK',
+  }) async {
+    final hours = durationHours.toStringAsFixed(1);
+    final url = _u('/tasks/calculate-cost/$hours').replace(
+      queryParameters: {'country': country},
+    );
+    try {
+      final res = await callWithRefresh((h) => _get(url, headers: h));
+      if (res.statusCode != 200) return null;
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // PAYMENTS
+  // ---------------------------------------------------------------------------
+
+  // POST /payments/create-intent  →  CreateIntentOut
+  static Future<Map<String, dynamic>> createPaymentIntent({
+    required int amount,
+    required String currency,
+    required String taskId,
+  }) async {
+    final res = await callWithRefresh(
+      (h) => _post(
+        _u('/payments/create-intent'),
+        {'amount': amount, 'currency': currency, 'task_id': taskId},
+        headers: h,
+      ),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'POST /payments/create-intent failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  // POST /payments/capture  →  { task_id }
+  static Future<Map<String, dynamic>> capturePayment(String taskId) async {
+    final res = await callWithRefresh(
+      (h) => _post(_u('/payments/capture'), {'task_id': taskId}, headers: h),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'POST /payments/capture failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  // POST /payments/cancel  →  { task_id }
+  static Future<Map<String, dynamic>> cancelPayment(String taskId) async {
+    final res = await callWithRefresh(
+      (h) => _post(_u('/payments/cancel'), {'task_id': taskId}, headers: h),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'POST /payments/cancel failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  // POST /payments/cod/init  →  COD initiation
+  static Future<Map<String, dynamic>> initCodPayment({
+    required String taskId,
+    required int amount,
+    required String currency,
+  }) async {
+    final res = await callWithRefresh(
+      (h) => _post(
+        _u('/payments/cod/init'),
+        {'task_id': taskId, 'amount': amount, 'currency': currency},
+        headers: h,
+      ),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'POST /payments/cod/init failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZANCREW — ACTIVE TASK
+  // ---------------------------------------------------------------------------
+
+  // GET /zancrew/active_task  →  { active, task_id?, status?, title? }
+  static Future<Map<String, dynamic>?> getActiveTask() async {
+    try {
+      final res = await callWithRefresh(
+        (h) => _get(_u('/zancrew/active_task'), headers: h),
+      );
+      if (res.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(res.body));
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // POST /auth/refresh  →  { refresh_token }
   // Returns a new TokenPair and updates stored tokens.
   static Future<bool> refreshToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -512,7 +816,7 @@ class ApiService {
     }
 
     try {
-      final res = await _post(_u('/auth/auth/refresh'), {
+      final res = await _post(_u('/auth/refresh'), {
         'refresh_token': refreshTok,
       }, timeout: const Duration(seconds: 15));
 
@@ -540,7 +844,7 @@ class ApiService {
     }
   }
 
-  // POST /auth/auth/logout  →  { refresh_token }  (requires Bearer token)
+  // POST /auth/logout  →  { refresh_token }  (requires Bearer token)
   // Invalidates the refresh token on the server.
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
@@ -552,7 +856,7 @@ class ApiService {
     try {
       await httpClient
           .post(
-            _u('/auth/auth/logout'),
+            _u('/auth/logout'),
             headers: {...jsonHeaders, 'Authorization': 'Bearer $access'},
             body: jsonEncode({'refresh_token': refresh}),
           )
@@ -562,21 +866,13 @@ class ApiService {
     }
   }
 
-  // GET /auth/auth/me  (requires Bearer token)
+  // GET /auth/me  (requires Bearer token)
   // Returns the current user's profile as a Map, or null on failure.
   static Future<Map<String, dynamic>?> getMe() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
-    if (token == null || token.isEmpty) return null;
-
     try {
-      final res = await httpClient
-          .get(
-            _u('/auth/auth/me'),
-            headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
-          )
-          .timeout(const Duration(seconds: 12));
-
+      final res = await callWithRefresh(
+        (h) => httpClient.get(_u('/auth/me'), headers: h).timeout(const Duration(seconds: 12)),
+      );
       if (res.statusCode == 200) {
         return jsonDecode(res.body) as Map<String, dynamic>;
       }
@@ -588,7 +884,7 @@ class ApiService {
     }
   }
 
-  // PATCH /auth/auth/me  →  { full_name?, password? }  (requires Bearer token)
+  // PATCH /auth/me  →  { full_name?, password? }  (requires Bearer token)
   // Updates the current user's profile.
   static Future<Map<String, dynamic>?> updateProfile({
     String? fullName,
@@ -606,7 +902,7 @@ class ApiService {
     try {
       final res = await httpClient
           .patch(
-            _u('/auth/auth/me'),
+            _u('/auth/me'),
             headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
             body: jsonEncode(payload),
           )
@@ -633,14 +929,17 @@ class ApiService {
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 12),
   }) async {
-    final base = await authHeaders();
-    final merged = {...base, if (headers != null) ...headers};
     final url = _u(path);
     _log('postJson', 'POST $url payload=${jsonEncode(body)}');
-
-    return httpClient
-        .post(url, headers: merged, body: jsonEncode(body))
-        .timeout(timeout);
+    return callWithRefresh(
+      (h) => httpClient
+          .post(
+            url,
+            headers: {...h, if (headers != null) ...headers},
+            body: jsonEncode(body),
+          )
+          .timeout(timeout),
+    );
   }
 
   static Future<http.Response> getJson(
@@ -648,12 +947,13 @@ class ApiService {
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 12),
   }) async {
-    final base = await authHeaders();
-    final merged = {...base, if (headers != null) ...headers};
     final url = _u(path);
     _log('getJson', 'GET $url');
-
-    return httpClient.get(url, headers: merged).timeout(timeout);
+    return callWithRefresh(
+      (h) => httpClient
+          .get(url, headers: {...h, if (headers != null) ...headers})
+          .timeout(timeout),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -688,9 +988,9 @@ class ApiService {
     }
 
     return httpClient.post(
-      Uri.parse('$baseUrl/auth/update-phone/send'),
+      Uri.parse('$baseUrl/auth/change-phone/send-otp'),
       headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
-      body: jsonEncode({'new_phone': newPhone.trim()}),
+      body: jsonEncode({'phone': newPhone.trim()}),
     );
   }
 
@@ -706,9 +1006,9 @@ class ApiService {
     }
 
     final res = await httpClient.post(
-      Uri.parse('$baseUrl/auth/update-phone/verify'),
+      Uri.parse('$baseUrl/auth/change-phone/verify'),
       headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
-      body: jsonEncode({'new_phone': newPhone.trim(), 'code': code.trim()}),
+      body: jsonEncode({'phone': newPhone.trim(), 'code': code.trim()}),
     );
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -840,6 +1140,28 @@ class ApiService {
     throw HttpException(
       'Upload failed: ${res.statusCode} ${_truncate(res.body)}',
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CREW EARNINGS
+  // ---------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> getCrewEarnings() async {
+    final res = await callWithRefresh(
+      (h) => _get(_u('/zancrew/earnings'), headers: h),
+    );
+    if (res.statusCode != 200) {
+      throw HttpException(
+        'GET /zancrew/earnings failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      throw const HttpException('Unexpected earnings payload shape');
+    } catch (e) {
+      throw HttpException('GET /zancrew/earnings JSON decode failed: $e');
+    }
   }
 
   // ---------------------------------------------------------------------------

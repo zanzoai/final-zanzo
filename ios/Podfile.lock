@@ -3,6 +3,9 @@ PODS:
     - Flutter
   - camera_avfoundation (0.0.1):
     - Flutter
+  - CwlCatchException (2.2.1):
+    - CwlCatchExceptionSupport (~> 2.2.1)
+  - CwlCatchExceptionSupport (2.2.1)
   - DKImagePickerController/Core (4.3.9):
     - DKImagePickerController/ImageDataManager
     - DKImagePickerController/Resource
@@ -249,49 +252,72 @@ PODS:
     - FlutterMacOS
   - permission_handler_apple (9.3.0):
     - Flutter
-  - PromisesObjC (2.4.0)
+  - PromisesObjC (2.4.1)
   - SDWebImage (5.21.7):
     - SDWebImage/Core (= 5.21.7)
   - SDWebImage/Core (5.21.7)
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
-  - Stripe (23.18.3):
-    - StripeApplePay (= 23.18.3)
-    - StripeCore (= 23.18.3)
-    - StripePayments (= 23.18.3)
-    - StripePaymentsUI (= 23.18.3)
-    - StripeUICore (= 23.18.3)
+  - speech_to_text (7.2.0):
+    - CwlCatchException
+    - Flutter
+    - FlutterMacOS
+  - Stripe (24.7.0):
+    - StripeApplePay (= 24.7.0)
+    - StripeCore (= 24.7.0)
+    - StripePayments (= 24.7.0)
+    - StripePaymentsUI (= 24.7.0)
+    - StripeUICore (= 24.7.0)
   - stripe_ios (0.0.1):
     - Flutter
-    - Stripe (~> 23.18.0)
-    - StripeApplePay (~> 23.18.0)
-    - StripeFinancialConnections (~> 23.18.0)
-    - StripePayments (~> 23.18.0)
-    - StripePaymentSheet (~> 23.18.0)
-    - StripePaymentsUI (~> 23.18.0)
-  - StripeApplePay (23.18.3):
-    - StripeCore (= 23.18.3)
-  - StripeCore (23.18.3)
-  - StripeFinancialConnections (23.18.3):
-    - StripeCore (= 23.18.3)
-    - StripeUICore (= 23.18.3)
-  - StripePayments (23.18.3):
-    - StripeCore (= 23.18.3)
-    - StripePayments/Stripe3DS2 (= 23.18.3)
-  - StripePayments/Stripe3DS2 (23.18.3):
-    - StripeCore (= 23.18.3)
-  - StripePaymentSheet (23.18.3):
-    - StripeApplePay (= 23.18.3)
-    - StripeCore (= 23.18.3)
-    - StripePayments (= 23.18.3)
-    - StripePaymentsUI (= 23.18.3)
-  - StripePaymentsUI (23.18.3):
-    - StripeCore (= 23.18.3)
-    - StripePayments (= 23.18.3)
-    - StripeUICore (= 23.18.3)
-  - StripeUICore (23.18.3):
-    - StripeCore (= 23.18.3)
+    - Stripe (~> 24.7.0)
+    - stripe_ios/stripe_ios (= 0.0.1)
+    - stripe_ios/stripe_objc (= 0.0.1)
+    - StripeApplePay (~> 24.7.0)
+    - StripeFinancialConnections (~> 24.7.0)
+    - StripePayments (~> 24.7.0)
+    - StripePaymentSheet (~> 24.7.0)
+    - StripePaymentsUI (~> 24.7.0)
+  - stripe_ios/stripe_ios (0.0.1):
+    - Flutter
+    - Stripe (~> 24.7.0)
+    - stripe_ios/stripe_objc
+    - StripeApplePay (~> 24.7.0)
+    - StripeFinancialConnections (~> 24.7.0)
+    - StripePayments (~> 24.7.0)
+    - StripePaymentSheet (~> 24.7.0)
+    - StripePaymentsUI (~> 24.7.0)
+  - stripe_ios/stripe_objc (0.0.1):
+    - Flutter
+    - Stripe (~> 24.7.0)
+    - StripeApplePay (~> 24.7.0)
+    - StripeFinancialConnections (~> 24.7.0)
+    - StripePayments (~> 24.7.0)
+    - StripePaymentSheet (~> 24.7.0)
+    - StripePaymentsUI (~> 24.7.0)
+  - StripeApplePay (24.7.0):
+    - StripeCore (= 24.7.0)
+  - StripeCore (24.7.0)
+  - StripeFinancialConnections (24.7.0):
+    - StripeCore (= 24.7.0)
+    - StripeUICore (= 24.7.0)
+  - StripePayments (24.7.0):
+    - StripeCore (= 24.7.0)
+    - StripePayments/Stripe3DS2 (= 24.7.0)
+  - StripePayments/Stripe3DS2 (24.7.0):
+    - StripeCore (= 24.7.0)
+  - StripePaymentSheet (24.7.0):
+    - StripeApplePay (= 24.7.0)
+    - StripeCore (= 24.7.0)
+    - StripePayments (= 24.7.0)
+    - StripePaymentsUI (= 24.7.0)
+  - StripePaymentsUI (24.7.0):
+    - StripeCore (= 24.7.0)
+    - StripePayments (= 24.7.0)
+    - StripeUICore (= 24.7.0)
+  - StripeUICore (24.7.0):
+    - StripeCore (= 24.7.0)
   - SwiftyGif (5.4.5)
   - TOCropViewController (2.8.0)
   - url_launcher_ios (0.0.1):
@@ -323,11 +349,14 @@ DEPENDENCIES:
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
+  - speech_to_text (from `.symlinks/plugins/speech_to_text/darwin`)
   - stripe_ios (from `.symlinks/plugins/stripe_ios/ios`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
 
 SPEC REPOS:
   trunk:
+    - CwlCatchException
+    - CwlCatchExceptionSupport
     - DKImagePickerController
     - DKPhotoGallery
     - Firebase
@@ -404,6 +433,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
   shared_preferences_foundation:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
+  speech_to_text:
+    :path: ".symlinks/plugins/speech_to_text/darwin"
   stripe_ios:
     :path: ".symlinks/plugins/stripe_ios/ios"
   url_launcher_ios:
@@ -412,6 +443,8 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
   camera_avfoundation: be3be85408cd4126f250386828e9b1dfa40ab436
+  CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
+  CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60
   file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
@@ -452,18 +485,19 @@ SPEC CHECKSUMS:
   package_info_plus: 566e1b7a2f3900e4b0020914ad3fc051dcc95596
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
-  PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
+  PromisesObjC: 752c3227f599e3467650e47ea36f433eeb10c273
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
-  Stripe: e046335ab6e3f25d39f1a55bd98620a85269cffa
-  stripe_ios: 5d662b18a55cb206e057eb19d04d562f401a865f
-  StripeApplePay: 1aa77f8ec7a6d9463fa8f49ae0672fe59dbf4c73
-  StripeCore: fe10c34fb3c9ae18b986913f7e4460e7c653ce93
-  StripeFinancialConnections: 6022426894046f26fe21d348da02d83d8a637fb0
-  StripePayments: 7084fed30c5f03f15ae23c5dce63715ba0b53e15
-  StripePaymentSheet: c8d25d4133476c6238d3cc932fb8219bb5ea49c0
-  StripePaymentsUI: c12de264eda974d91e43a769f53a6c6afc9a1715
-  StripeUICore: 090c4fe916d039616ce8f8de30392f4aeb33dd16
+  speech_to_text: 3b313d98516d3d0406cea424782ec25470c59d19
+  Stripe: 8a03a78bfa16b197f9fac51e42670ac563b34388
+  stripe_ios: 95bdf6ba58efd184fe1dfed194cd8692299d66ca
+  StripeApplePay: 3c1b43d9b5130f6b714863bf8c9482c24168ab27
+  StripeCore: 4955c2af14446db04818ad043d19d8f97b73c5fa
+  StripeFinancialConnections: 8cf97b04c2f354879a2a5473126efac38f11f406
+  StripePayments: 91820845bece6117809bcfdcaef39c84c2b4cae5
+  StripePaymentSheet: 1810187cbdbc73410b8fb86cecafaaa41c1481fc
+  StripePaymentsUI: 326376e23caa369d1f58041bdb858c89c2b17ed4
+  StripeUICore: 17a4f3adb81ae05ab885e1b353022a430176eab1
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
   TOCropViewController: 797deaf39c90e6e9ddd848d88817f6b9a8a09888
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d

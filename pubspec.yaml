@@ -13,6 +13,7 @@ dependencies:
 
   # 🌐 Networking & Storage
   http: ^1.2.2
+  http_parser: ^4.1.2
   shared_preferences: ^2.2.2
   uuid: ^4.5.1
 
@@ -53,6 +54,7 @@ dependencies:
 
 
   # 🎙️ Voice
+  speech_to_text: ^7.4.0
   web_socket_channel: ^2.4.0
   flutter_sound: ^9.28.0
   camera_camera: ^3.0.0

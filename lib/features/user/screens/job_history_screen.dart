@@ -4,13 +4,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-// Core services
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/features/user/screens/review_task_screen.dart';
-// User screens
 import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
 
 class JobHistoryScreen extends StatefulWidget {
@@ -31,48 +27,19 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
   }
 
   Future<void> _fetchJobs() async {
+    setState(() => isLoading = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('user_id');
-
-      if (userId == null || userId.isEmpty) {
-        setState(() => isLoading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('No user logged in')));
-        }
-        return;
-      }
-
-      final res = await http.get(
-        Uri.parse("${ApiService.baseUrl}/profiles/$userId/jobs"),
-        headers: await ApiService.authHeaders(),
-      );
-
+      final res = await ApiService.getJson('/tasks/my');
       if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (mounted) {
-          setState(() {
-            jobs = (data is List) ? data : [];
-            isLoading = false;
-          });
-        }
-      } else {
-        setState(() => isLoading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error fetching jobs: ${res.body}')),
-          );
+        final decoded = jsonDecode(res.body);
+        if (decoded is List) {
+          setState(() => jobs = decoded);
         }
       }
-    } catch (e) {
+    } catch (_) {
+      // ignore
+    } finally {
       setState(() => isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Network error: $e')));
-      }
     }
   }
 
@@ -263,7 +230,16 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : jobs.isEmpty
-          ? const Center(child: Text("No jobs found"))
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  "No orders yet.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
           : ListView.separated(
               padding: const EdgeInsets.all(12),
               itemCount: jobs.length,
@@ -277,7 +253,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
                 final title = backendConcise.isNotEmpty
                     ? backendConcise
                     : _safeStr(
-                        job['task_title'],
+                        job['title'],
                         _safeStr(
                           job['short_title'],
                           _safeStr(job['polished_task'], 'Your Task'),
@@ -291,7 +267,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
 
                 final description = _safeStr(job['polished_task']);
 
-                final notesAny = job['important_notes'];
+                final notesAny = job['notes'];
                 final notesList = _safeStrList(notesAny);
                 final notesText = (notesAny is String) ? notesAny.trim() : '';
 
@@ -305,9 +281,17 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
                 final duration = _safeStr(job['duration_hours']);
                 final people = _safeStr(job['people_required']);
 
-                final costPence = job['estimated_cost_pence'];
-                final cost = (costPence is num)
-                    ? (costPence / 100).toStringAsFixed(2)
+                final amount = job['estimated_amount'];
+                final currency = _safeStr(job['currency'], 'GBP').toUpperCase();
+                final symbol = currency == 'GBP'
+                    ? '£'
+                    : currency == 'INR'
+                    ? '₹'
+                    : currency;
+                final cost = (amount is num)
+                    ? amount.toStringAsFixed(
+                        amount.truncateToDouble() == amount ? 0 : 2,
+                      )
                     : '';
 
                 return Card(
@@ -474,7 +458,9 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
                         ),
                         _kvRow(
                           icon: '💰',
-                          text: cost.isNotEmpty ? 'Estimated: £$cost' : '',
+                          text: cost.isNotEmpty
+                              ? 'Estimated: $symbol$cost'
+                              : '',
                         ),
                         const SizedBox(height: 14),
                         Align(
@@ -494,14 +480,14 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
                                       job,
                                     );
 
-                                    final anyNotes = prefill['important_notes'];
+                                    final anyNotes = prefill['notes'];
                                     if (anyNotes is String) {
                                       final chips = anyNotes
                                           .split(RegExp(r'\s*,\s*'))
                                           .map((e) => e.trim())
                                           .where((e) => e.isNotEmpty)
                                           .toList();
-                                      prefill['important_notes'] = chips;
+                                      prefill['notes'] = chips;
                                     }
 
                                     Navigator.push(

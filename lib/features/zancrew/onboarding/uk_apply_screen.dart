@@ -2,8 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/uk_provider_api.dart';
+import 'uk_document_upload_screen.dart';
+import 'uk_hold_screen.dart';
 import 'uk_pending_screen.dart';
-import 'uk_student_blocked_screen.dart';
+import 'uk_rejected_screen.dart';
 
 class UkApplyScreen extends StatefulWidget {
   final String workStatus;
@@ -26,6 +28,10 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _shareCodeCtrl = TextEditingController();
+  final _universityCtrl = TextEditingController();
+  final _courseCtrl = TextEditingController();
+  final _visaExpiryCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
 
   bool _termsAgreed = false;
   bool _submitting = false;
@@ -49,6 +55,10 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
     _phoneCtrl.dispose();
     _addressCtrl.dispose();
     _shareCodeCtrl.dispose();
+    _universityCtrl.dispose();
+    _courseCtrl.dispose();
+    _visaExpiryCtrl.dispose();
+    _notesCtrl.dispose();
     super.dispose();
   }
 
@@ -81,15 +91,65 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
             ? _shareCodeCtrl.text.trim()
             : null,
         termsAgreed: true,
+        universityName: _universityCtrl.text.trim().isNotEmpty
+            ? _universityCtrl.text.trim()
+            : null,
+        courseName: _courseCtrl.text.trim().isNotEmpty
+            ? _courseCtrl.text.trim()
+            : null,
+        visaExpiryDate: _visaExpiryCtrl.text.trim().isNotEmpty
+            ? _visaExpiryCtrl.text.trim()
+            : null,
+        applicantNotes: _notesCtrl.text.trim().isNotEmpty
+            ? _notesCtrl.text.trim()
+            : null,
       );
 
       if (!mounted) return;
 
+      const holdStatuses = {'student_visa', 'skilled_worker_or_other', 'unknown'};
       final providerStatus = result['provider_status'] as String? ?? 'pending';
+      final declaredStatus =
+          result['declared_work_status'] as String? ?? widget.workStatus;
+
       if (providerStatus == 'rejected') {
+        if (holdStatuses.contains(declaredStatus)) {
+          final String holdMsg;
+          switch (declaredStatus) {
+            case 'student_visa':
+              holdMsg =
+                  'Your details have been received. Our team will review your route and notify you when a suitable student route becomes available.';
+              break;
+            case 'skilled_worker_or_other':
+              holdMsg =
+                  'Your details have been received. We\'ll review your work route and let you know when paid ZanCrew tasks become available.';
+              break;
+            default:
+              holdMsg =
+                  'Your details have been received. We may need more information before paid tasks can be enabled. We\'ll notify you when your route is ready.';
+          }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UkHoldScreen(reason: holdMsg),
+            ),
+          );
+        } else {
+          final reason = result['rejection_reason'] as String?;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UkRejectedScreen(
+                status: 'rejected',
+                reason: reason,
+              ),
+            ),
+          );
+        }
+      } else if (widget.workStatus == 'british_irish') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const UkStudentBlockedScreen()),
+          MaterialPageRoute(builder: (_) => const UkDocumentUploadScreen()),
         );
       } else {
         Navigator.pushReplacement(
@@ -116,9 +176,31 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
       case 'graduate_visa':
         return 'Graduate Visa';
       case 'skilled_worker_or_other':
-        return 'Skilled Worker or other visa';
+        return 'Skilled Worker / restricted work visa';
+      case 'student_visa':
+        return 'Student Visa';
+      case 'unknown':
+        return 'Other visa / I\'m not sure';
       default:
         return widget.workStatus;
+    }
+  }
+
+  String get _helpText {
+    switch (widget.workStatus) {
+      case 'british_irish':
+        return 'Your details will be reviewed manually by our team. Please provide your full legal name as it appears on your passport.';
+      case 'settled_pre_settled':
+      case 'graduate_visa':
+        return 'Please provide your GOV.UK share code. We will verify your right to work.';
+      case 'skilled_worker_or_other':
+        return 'Please provide your GOV.UK share code. This route may have work restrictions, so we\'ll review your details before paid tasks are enabled.';
+      case 'student_visa':
+        return 'Please provide your GOV.UK share code and student details. We\'ll keep your application ready for a future student route.';
+      case 'unknown':
+        return 'Tell us your details and we\'ll help determine your right-to-work route. We may ask for more evidence before paid tasks can be enabled.';
+      default:
+        return 'Please provide your details.';
     }
   }
 
@@ -143,8 +225,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
                   border: Border.all(color: Colors.orangeAccent),
                 ),
                 child: Text(
-                  'Status: $_statusLabel\n\n'
-                  '${widget.workStatus == 'british_irish' ? 'Your details will be reviewed manually by our team. Please provide your full legal name as it appears on your passport.' : 'Please provide your GOV.UK share code. We will verify your right to work at gov.uk/prove-right-to-work.'}',
+                  'Status: $_statusLabel\n\n$_helpText',
                   style: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -212,6 +293,60 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
                   },
                 ),
               ],
+              if (widget.workStatus == 'student_visa') ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _universityCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'University Name *',
+                    border: OutlineInputBorder(),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'University name is required' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _courseCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Course Name *',
+                    border: OutlineInputBorder(),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Course name is required' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _visaExpiryCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Visa Expiry Date (YYYY-MM-DD)',
+                    border: OutlineInputBorder(),
+                    hintText: '2026-12-31',
+                  ),
+                  keyboardType: TextInputType.datetime,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    if (DateTime.tryParse(v.trim()) == null) return 'Use format YYYY-MM-DD';
+                    return null;
+                  },
+                ),
+              ],
+              if (widget.workStatus == 'unknown' ||
+                  widget.workStatus == 'skilled_worker_or_other') ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _notesCtrl,
+                  decoration: InputDecoration(
+                    labelText: widget.workStatus == 'unknown'
+                        ? 'Tell us about your visa or right-to-work proof'
+                        : 'Any extra details about your work restrictions? (optional)',
+                    border: const OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+              ],
               const SizedBox(height: 24),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,7 +360,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
                     child: Padding(
                       padding: EdgeInsets.only(top: 12),
                       child: Text(
-                        'I confirm that I am working as an independent self-employed provider and agree to the terms and conditions. I declare that the information provided is accurate.',
+                        'I confirm the information I have provided is accurate and agree to the terms and conditions.',
                         style: TextStyle(fontSize: 13),
                       ),
                     ),

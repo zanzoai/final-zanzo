@@ -1,7 +1,6 @@
 // lib/features/zancrew/onboarding/uk_work_status_screen.dart
 import 'package:flutter/material.dart';
 import 'uk_apply_screen.dart';
-import 'uk_student_blocked_screen.dart';
 
 class UkWorkStatusScreen extends StatelessWidget {
   const UkWorkStatusScreen({super.key});
@@ -48,14 +47,22 @@ class UkWorkStatusScreen extends StatelessWidget {
                 requiresShareCode: true,
               ),
               _StatusTile(
-                title: 'Skilled Worker or other visa',
+                title: 'Skilled Worker / restricted work visa',
                 subtitle: 'Provide GOV.UK share code for right to work',
                 value: 'skilled_worker_or_other',
                 requiresShareCode: true,
               ),
-              _BlockedTile(
+              _StatusTile(
                 title: 'Student Visa',
-                subtitle: 'Not permitted for independent provider work',
+                subtitle: 'Share your details — we\'ll keep them ready for when a student route launches.',
+                value: 'student_visa',
+                requiresShareCode: true,
+              ),
+              _StatusTile(
+                title: 'Other visa / I\'m not sure',
+                subtitle: 'Choose this if you need help proving your right to work.',
+                value: 'unknown',
+                requiresShareCode: false,
               ),
             ],
           ),
@@ -100,29 +107,3 @@ class _StatusTile extends StatelessWidget {
   }
 }
 
-class _BlockedTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-
-  const _BlockedTile({required this.title, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: Colors.red.shade50,
-      child: ListTile(
-        title: Text(
-          title,
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red.shade700),
-        ),
-        subtitle: Text(subtitle),
-        trailing: Icon(Icons.block, color: Colors.red.shade400),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const UkStudentBlockedScreen()),
-        ),
-      ),
-    );
-  }
-}

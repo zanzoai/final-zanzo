@@ -210,7 +210,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
       final userId = prefs.getString('user_id') ?? '';
       if (userId.isEmpty) return;
 
-      final res = await ApiService.getJson('/zancrew/active_job?user_id=$userId');
+      final res = await ApiService.getJson('/zancrew/active_task');
       if (!mounted) return;
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -235,7 +235,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
 
     setState(() => _loading = true);
     try {
-      final res = await ApiService.getJson('/jobs/$_jobId');
+      final res = await ApiService.getJson('/tasks/$_jobId');
 
       if (!mounted) return;
       if (res.statusCode == 200) {

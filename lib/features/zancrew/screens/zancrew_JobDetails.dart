@@ -104,7 +104,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           jobId: widget.jobId,
-          jobTitle: (_job?['task_title'] ?? 'Chat').toString(),
+          jobTitle: (_job?['title'] ?? 'Chat').toString(),
           viewerUserId: viewerUserId,
         ),
       ),
@@ -118,7 +118,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
   Future<void> _loadJob() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiService.getJson('/jobs/${widget.jobId}');
+      final res = await ApiService.getJson('/tasks/${widget.jobId}');
       if (!mounted) return;
 
       if (res.statusCode == 200) {
@@ -257,42 +257,21 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
 
   String _priceLabel() {
     final currency = (_job?['currency'] ?? '').toString().toUpperCase();
-
-    // Primary path: INR (paise → rupees)
-    final paise = _job?['estimated_amount_paise'];
-    if (paise != null) {
+    final amount = _job?['estimated_amount'];
+    if (amount != null) {
       try {
-        final p = (paise is num)
-            ? paise.toDouble()
-            : double.parse(paise.toString());
-        final rupees = p / 100.0;
-        final symbol = (currency == 'INR')
-            ? '₹'
-            : (currency == 'GBP')
-            ? '£'
-            : '£';
-        final isWhole = rupees.truncateToDouble() == rupees;
-        return '$symbol${rupees.toStringAsFixed(isWhole ? 0 : 2)} est.';
-      } catch (_) {}
-    }
-
-    // Legacy UK path: pence → pounds
-    final pence = _job?['estimated_cost_pence'];
-    if (pence != null) {
-      try {
-        final p = (pence is num)
-            ? pence.toDouble()
-            : double.parse(pence.toString());
-        final pounds = p / 100.0;
+        final v = (amount is num)
+            ? amount.toDouble()
+            : double.parse(amount.toString());
         final symbol = (currency == 'GBP')
             ? '£'
             : (currency == 'INR')
             ? '₹'
             : '£';
-        return '$symbol${pounds.toStringAsFixed(2)} est.';
+        final isWhole = v.truncateToDouble() == v;
+        return '$symbol${v.toStringAsFixed(isWhole ? 0 : 2)} est.';
       } catch (_) {}
     }
-
     return '';
   }
 
@@ -307,7 +286,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
   }
 
   List<String> _importantNotes() {
-    final n = _job?['important_notes'];
+    final n = _job?['notes'];
     if (n is List) return _strList(n);
     if (n is String && n.trim().isNotEmpty) {
       return n
@@ -348,6 +327,8 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       ).showSnackBar(SnackBar(content: Text('Marked as ${_pretty(status)}')));
 
       await _loadJob();
+      // Force status — Redis may serve stale data for up to 60s after event POST
+      if (mounted && _job != null) setState(() => _job!['status'] = status);
 
       // notify earnings screen it should refresh
       if (status == 'completed') {
@@ -391,14 +372,14 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Ask the customer for the 4-digit Start PIN.',
+                      'Ask the customer for the 6-digit Start PIN.',
                       style: TextStyle(color: _muted),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: controller,
                       decoration: InputDecoration(
-                        hintText: '4-digit PIN',
+                        hintText: '6-digit PIN',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -407,7 +388,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                         errorText: errorText,
                       ),
                       keyboardType: TextInputType.number,
-                      maxLength: 4,
+                      maxLength: 6,
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -445,6 +426,8 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             const SnackBar(content: Text('Start PIN verified — job started')),
           );
           await _loadJob();
+          if (mounted && _job != null)
+            setState(() => _job!['status'] = 'in_progress');
           return; // success → exit loop
         } catch (_) {
           errorText = "Wrong PIN, please try again";
@@ -478,14 +461,14 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Ask the customer for the 4-digit End PIN to complete the job.',
+                      'Ask the customer for the 6-digit End PIN to complete the job.',
                       style: TextStyle(color: _muted),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: controller,
                       decoration: InputDecoration(
-                        hintText: '4-digit PIN',
+                        hintText: '6-digit PIN',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -494,7 +477,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                         errorText: errorText,
                       ),
                       keyboardType: TextInputType.number,
-                      maxLength: 4,
+                      maxLength: 6,
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -532,6 +515,8 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             const SnackBar(content: Text('End PIN verified — job completed ✅')),
           );
           await _loadJob();
+          if (mounted && _job != null)
+            setState(() => _job!['status'] = 'completed');
           Navigator.of(context).pop(true);
           return; // success → exit loop
         } catch (_) {
@@ -1091,9 +1076,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Need help?',
           style: TextStyle(fontWeight: FontWeight.w800),
@@ -1269,7 +1252,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       );
     }
 
-    final title = (_job!['task_title'] ?? '').toString();
+    final title = (_job!['title'] ?? '').toString();
     final desc = (_job!['polished_task'] ?? '').toString();
     final addr = (_job!['location_address'] ?? '').toString();
     final when = _whenLabel();

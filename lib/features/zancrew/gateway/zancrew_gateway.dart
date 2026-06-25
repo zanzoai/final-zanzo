@@ -89,12 +89,15 @@ class _ZanCrewGatewayState extends State<ZanCrewGateway> {
       // -----------------------------------------------------------------------
       // 4) Extract fields
       // -----------------------------------------------------------------------
-      final buckets = (profile['buckets'] as List?)?.cast<String>() ?? [];
+      final bucketsRaw = profile['buckets'];
+      final hasBuckets =
+          (bucketsRaw is String && bucketsRaw.trim().isNotEmpty) ||
+          (bucketsRaw is List && bucketsRaw.isNotEmpty);
 
       // -----------------------------------------------------------------------
       // CASE A — Preferences missing → onboarding
       // -----------------------------------------------------------------------
-      if (buckets.isEmpty) {
+      if (!hasBuckets) {
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
@@ -157,7 +160,7 @@ class _ZanCrewGatewayState extends State<ZanCrewGateway> {
       // -----------------------------------------------------------------------
       try {
         final activeRes = await ApiService.getJson(
-          '/zancrew/active_job?user_id=$userId',
+          '/zancrew/active_task',
         );
 
         if (activeRes.statusCode == 200) {
@@ -165,8 +168,8 @@ class _ZanCrewGatewayState extends State<ZanCrewGateway> {
 
           if (decoded is Map &&
               decoded['active'] == true &&
-              decoded['job_id'] != null) {
-            final jobId = decoded['job_id'].toString();
+              decoded['task_id'] != null) {
+            final jobId = decoded['task_id'].toString();
             if (!mounted) return;
             Navigator.pushReplacement(
               context,

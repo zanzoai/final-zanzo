@@ -6,6 +6,8 @@
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'api_service.dart';
+
 class LocationHelper {
   // ---------------------------------------------------------------------------
   // 1) GET CURRENT GPS LOCATION
@@ -38,9 +40,18 @@ class LocationHelper {
     }
 
     // Return accurate GPS position
-    return Geolocator.getCurrentPosition(
+    final position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
+
+    // Notify backend to reverse-geocode and embed country_code in JWT.
+    // Only runs if authenticated; errors are swallowed so they never block callers.
+    await ApiService.setUserLocation(
+      lat: position.latitude,
+      lng: position.longitude,
+    ).catchError((_) => null);
+
+    return position;
   }
 
   // ---------------------------------------------------------------------------

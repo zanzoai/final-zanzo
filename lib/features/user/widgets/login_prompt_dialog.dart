@@ -13,6 +13,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
+import 'package:zanzo_frontend/core/services/location_helper.dart';
 
 /// Public entry → Opens the login dialog.
 /// Returns true when login process success (OTP verified).
@@ -91,7 +92,7 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
     }
 
     try {
-      final url = Uri.parse("${ApiService.baseUrl}/auth/auth/send-phone-otp");
+      final url = Uri.parse("${ApiService.baseUrl}/auth/send-phone-otp");
       final res = await ApiService.httpClient.post(
         url,
         headers: ApiService.jsonHeaders,
@@ -138,7 +139,7 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
     }
 
     try {
-      final url = Uri.parse("${ApiService.baseUrl}/auth/auth/verify-phone-otp");
+      final url = Uri.parse("${ApiService.baseUrl}/auth/verify-phone-otp");
       final res = await ApiService.httpClient.post(
         url,
         headers: ApiService.jsonHeaders,
@@ -181,6 +182,12 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
 
         // Register FCM token for push notifications (all users: customer + crew)
         unawaited(_registerFcmToken());
+
+        // Get GPS location and upgrade OTP token to geo-aware token.
+        // Errors are swallowed so a denied permission never blocks login.
+        try {
+          await LocationHelper.getCurrentLocation();
+        } catch (_) {}
 
         if (mounted) Navigator.of(context).pop(true);
       } else {
