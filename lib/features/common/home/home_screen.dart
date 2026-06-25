@@ -12,6 +12,7 @@ import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Core
@@ -50,8 +51,13 @@ class _HomeScreenState extends State<HomeScreen>
 
   late final SpeechService _voice = SpeechService();
 
-  // Text already in box when mic is tapped — used to prepend recognised speech.
-  String _preRecordText = '';
+  // Stable snapshot of the text box taken when mic is tapped.
+  // Never mutated by the listener mid-session; every partial/final callback
+  // merges against this same base so append always works correctly.
+  String _voiceBaseText = '';
+
+  // Fires every second while long dictation is active to refresh the countdown.
+  Timer? _countdownTimer;
 
   // ---------------------------------------------------------------------------
   // USER / PREFS
@@ -171,17 +177,21 @@ class _HomeScreenState extends State<HomeScreen>
     // Sync UI with mic events
     _controller.addListener(() => setState(() {}));
 
-    // Warm-up: request permission early so the first tap is instant.
-    _voice.initialize();
-
-    // Voice listener — handles both live partial preview and final commit.
+    // Voice listener — three-branch session model:
+    //
+    //  1. isRecording + partialText  → live preview (base + partial)
+    //  2. !isRecording + finalText   → authoritative commit; clear base
+    //  3. !isRecording + partialText → status-'done' preview; KEEP base so that
+    //                                   _onResult(final), which fires a moment
+    //                                   later on iOS, can still merge correctly
+    //  4. !isRecording + both empty  → nothing heard; restore pre-session text
     _voice.addListener(() {
       if (!mounted) return;
 
       if (_voice.isRecording) {
-        // Live partial: update text box as the user speaks.
+        // Live partial preview while the mic is open.
         if (_voice.partialText.isNotEmpty) {
-          final base = _preRecordText.trim();
+          final base = _voiceBaseText.trim();
           _controller.text = base.isEmpty
               ? _voice.partialText
               : '$base ${_voice.partialText}';
@@ -190,24 +200,36 @@ class _HomeScreenState extends State<HomeScreen>
           );
         }
       } else {
-        // Recording stopped.
         if (_voice.finalText.trim().isNotEmpty) {
-          // Commit the recognised speech.
-          final base = _preRecordText.trim();
+          // Authoritative final result — commit and end the session.
+          // Clear _voiceBaseText BEFORE clearText() so the re-entrant
+          // notifyListeners() call inside clearText() sees an empty base
+          // and doesn't hit the restore branch below.
+          _stopCountdownTimer();
+          final base = _voiceBaseText.trim();
           final spoken = _voice.finalText.trim();
+          _voiceBaseText = '';
           _controller.text = base.isEmpty ? spoken : '$base $spoken';
           _controller.selection = TextSelection.fromPosition(
             TextPosition(offset: _controller.text.length),
           );
           _voice.clearText();
-          _preRecordText = '';
-        } else if (_preRecordText.isNotEmpty) {
-          // Nothing was recognised — restore what was there before.
-          _controller.text = _preRecordText;
+        } else if (_voice.partialText.trim().isNotEmpty) {
+          // _onStatus('done') fired but _onResult(final) has not arrived yet
+          // (common on iOS: status fires first, final follows ~50–200 ms later).
+          // Show the merged text as a live preview but do NOT commit or clear
+          // _voiceBaseText — we need it intact for the upcoming _onResult.
+          final base = _voiceBaseText.trim();
+          final partial = _voice.partialText.trim();
+          _controller.text = base.isEmpty ? partial : '$base $partial';
           _controller.selection = TextSelection.fromPosition(
             TextPosition(offset: _controller.text.length),
           );
-          _preRecordText = '';
+        } else if (_voiceBaseText.isNotEmpty) {
+          // speech_to_text 7.x fires _onResult(partial, '') as a plugin
+          // cleanup step between _onStatus('done') and _onResult(finalResult).
+          // Do NOT update the controller or clear _voiceBaseText here —
+          // _onResult(final) is still in flight and needs the base intact.
         }
       }
 
@@ -219,6 +241,7 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     _typeTimer?.cancel();
     _holdTimer?.cancel();
+    _countdownTimer?.cancel();
     _glowCtrl.dispose();
     _controller.dispose();
     _voice.disposeAll();
@@ -333,15 +356,20 @@ class _HomeScreenState extends State<HomeScreen>
   // ---------------------------------------------------------------------------
 
   Future<void> _toggleVoice() async {
-    if (_voice.isRecording) {
+    if (_voice.isRecording || _voice.isLongDictating) {
+      HapticFeedback.lightImpact();
+      _stopCountdownTimer();
       await _voice.stop();
       setState(() {});
       return;
     }
-    // Capture whatever is already typed so we can prepend it to the result.
-    _preRecordText = _controller.text;
+    // Snapshot the current text; listener merges all partials/finals onto this.
+    _voiceBaseText = _controller.text;
     final ok = await _voice.start();
-    if (!ok && mounted) {
+    if (ok) {
+      HapticFeedback.lightImpact();
+      _startCountdownTimer();
+    } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text(
@@ -354,6 +382,18 @@ class _HomeScreenState extends State<HomeScreen>
       );
     }
     setState(() {});
+  }
+
+  void _startCountdownTimer() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _stopCountdownTimer() {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -674,20 +714,18 @@ class _HomeScreenState extends State<HomeScreen>
                                   minHeight: 56,
                                   maxHeight: 180,
                                 ),
-                                child: Scrollbar(
-                                  child: TextField(
-                                    controller: _controller,
-                                    onChanged: (_) => setState(() {}),
-                                    onSubmitted: (_) =>
-                                        canSend ? _sendRequest() : null,
-                                    minLines: 3,
-                                    maxLines: 6,
-                                    keyboardType: TextInputType.multiline,
-                                    textInputAction: TextInputAction.newline,
-                                    decoration: const InputDecoration(
-                                      hintText: "Type or speak your request…",
-                                      border: InputBorder.none,
-                                    ),
+                                child: TextField(
+                                  controller: _controller,
+                                  onChanged: (_) => setState(() {}),
+                                  onSubmitted: (_) =>
+                                      canSend ? _sendRequest() : null,
+                                  minLines: 3,
+                                  maxLines: 6,
+                                  keyboardType: TextInputType.multiline,
+                                  textInputAction: TextInputAction.newline,
+                                  decoration: const InputDecoration(
+                                    hintText: "Type or speak your request…",
+                                    border: InputBorder.none,
                                   ),
                                 ),
                               ),
@@ -702,7 +740,9 @@ class _HomeScreenState extends State<HomeScreen>
                             // Mic — right of arrow for natural L→R: type → send → speak
                             _MicButton(
                               isRecording: _voice.isRecording,
+                              isLongDictating: _voice.isLongDictating,
                               isTranscribing: _voice.isTranscribing,
+                              secondsRemaining: _voice.secondsRemaining,
                               onPressed: _toggleVoice,
                             ),
                           ],
@@ -824,7 +864,7 @@ class _HomeScreenState extends State<HomeScreen>
                           ),
                   ),
 
-                  if (_voice.isRecording || _voice.isTranscribing)
+                  if (_voice.isRecording || _voice.isLongDictating)
                     const SizedBox(height: 10),
 
                   if (_isLoading)
@@ -927,79 +967,55 @@ class _HomeScreenState extends State<HomeScreen>
 
 class _MicButton extends StatelessWidget {
   final bool isRecording;
+  final bool isLongDictating;
   final bool isTranscribing;
+  final int secondsRemaining;
   final VoidCallback onPressed;
 
   const _MicButton({
     required this.isRecording,
+    required this.isLongDictating,
     required this.isTranscribing,
+    required this.secondsRemaining,
     required this.onPressed,
   });
 
+  static String _fmtSecs(int total) {
+    final m = total ~/ 60;
+    final s = total % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final showListening = isRecording;
-    final showTranscribing = !isRecording && isTranscribing;
-
+    final active = isRecording || isLongDictating;
     return Padding(
-      padding: const EdgeInsets.only(right: 6.0),
+      padding: const EdgeInsets.only(right: 4.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
             icon: Icon(
-              isRecording ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
-              color: isRecording ? Colors.red : Colors.black87,
-              size: 28,
+              active ? Icons.stop_rounded : Icons.mic_none_rounded,
+              color: Colors.black87,
+              size: 26,
             ),
             onPressed: onPressed,
           ),
-
-          if (showListening)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 6),
-              child: _Pill(text: "Listening…", color: Colors.red),
+          if (active)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4.0),
+              child: Text(
+                secondsRemaining > 30
+                    ? 'Listening…'
+                    : _fmtSecs(secondsRemaining),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade500,
+                  letterSpacing: 0.3,
+                ),
+              ),
             ),
-
-          if (showTranscribing)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 6),
-              child: _Pill(text: "Transcribing…", color: Colors.black87),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String text;
-  final Color color;
-
-  const _Pill({required this.text, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.circle, size: 8, color: color),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ],
       ),
     );

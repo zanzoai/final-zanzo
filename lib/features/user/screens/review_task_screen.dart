@@ -502,10 +502,11 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         ? null
         : _importantNotes.join(", ");
 
-    final jobRes = await http.post(
-      Uri.parse("${ApiService.baseUrl}/tasks/"),
-      headers: authHeaders,
-      body: jsonEncode({
+    final jobRes = await ApiService.callWithRefresh(
+      (h) => http.post(
+        Uri.parse("${ApiService.baseUrl}/tasks/"),
+        headers: h,
+        body: jsonEncode({
         "title": _conciseTitle,
         "polished_task": _taskController.text,
 
@@ -529,6 +530,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         "actions": _actions,
         "tags": _tags,
       }),
+      ),
     );
 
     if (jobRes.statusCode < 200 || jobRes.statusCode >= 300) {
@@ -567,14 +569,16 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         '🔷 [Stripe] POST create-payment-intent amount=$amountPence currency=${_currencyCode.toLowerCase()} job=$jobId',
       );
 
-      final payRes = await http.post(
-        Uri.parse('${ApiService.baseUrl}/payments/create-payment-intent'),
-        headers: authHeaders,
-        body: json.encode({
-          'amount': amountPence,
-          'currency': _currencyCode.toLowerCase(),
-          'task_id': jobId,
-        }),
+      final payRes = await ApiService.callWithRefresh(
+        (h) => http.post(
+          Uri.parse('${ApiService.baseUrl}/payments/create-intent'),
+          headers: h,
+          body: json.encode({
+            'amount': amountPence,
+            'currency': _currencyCode.toLowerCase(),
+            'task_id': jobId,
+          }),
+        ),
       );
 
       print(
@@ -620,10 +624,12 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       // Notify backend that Stripe has authorized the card (PI is requires_capture).
       // This sets payments.status='authorized', payments.gateway='stripe',
       // and jobs.payment_status='authorized' before the job lifecycle events fire.
-      final authResp = await http.post(
-        Uri.parse("${ApiService.baseUrl}/payments/stripe-authorized"),
-        headers: authHeaders,
-        body: jsonEncode({"task_id": jobId}),
+      final authResp = await ApiService.callWithRefresh(
+        (h) => http.post(
+          Uri.parse("${ApiService.baseUrl}/payments/stripe-authorized"),
+          headers: h,
+          body: jsonEncode({"task_id": jobId}),
+        ),
       );
       print(
         '🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}',

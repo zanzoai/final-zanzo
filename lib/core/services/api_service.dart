@@ -598,6 +598,213 @@ class ApiService {
     }
   }
 
+  static Future<bool> setLocation(double latitude, double longitude) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+
+    if (token == null || token.isEmpty) {
+      _log('setLocation', '⚠️ skipped — no access_token');
+      return false;
+    }
+
+    final res = await _post(
+      _u('/users/set-location'),
+      {'lat': latitude, 'lng': longitude},
+      headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
+    );
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      _log('setLocation', '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}');
+      return false;
+    }
+
+    try {
+      final Map<String, dynamic> body = jsonDecode(res.body);
+      final prefs = await SharedPreferences.getInstance();
+
+      final newAccessToken = body['access_token']?.toString();
+
+      if (newAccessToken == null || newAccessToken.isEmpty) {
+        _log(
+          'setLocation',
+          '❌ access_token missing from set-location response',
+        );
+        return false;
+      }
+
+      // Replace OTP token with geo-aware token
+      await prefs.setString('access_token', newAccessToken);
+
+      final countryCode = body['country_code']?.toString();
+      final region = body['region']?.toString();
+
+      if (countryCode != null && countryCode.isNotEmpty) {
+        await prefs.setString('country_code', countryCode);
+      }
+
+      if (region != null && region.isNotEmpty) {
+        await prefs.setString('region', region);
+      }
+
+      _log(
+        'setLocation',
+        '✅ token replaced country=$countryCode region=$region',
+      );
+
+      return true;
+    } catch (e, st) {
+      _log('setLocation', '❌ parse/save failed: $e\n$st');
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // TASKS — USER
+  // ---------------------------------------------------------------------------
+
+  // GET /tasks/my  →  List[TaskOut]
+  static Future<List<Map<String, dynamic>>> getMyTasks({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final url = _u('/tasks/my').replace(
+      queryParameters: {'limit': '$limit', 'offset': '$offset'},
+    );
+    final res = await callWithRefresh((h) => _get(url, headers: h));
+    if (res.statusCode != 200) {
+      throw HttpException(
+        'GET /tasks/my failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) throw const HttpException('Unexpected tasks/my payload');
+    return decoded.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  // GET /tasks/{task_id}/events  →  List[TaskEventOut]
+  static Future<List<Map<String, dynamic>>> getTaskEvents(String taskId) async {
+    final res = await callWithRefresh(
+      (h) => _get(_u('/tasks/$taskId/events'), headers: h),
+    );
+    if (res.statusCode != 200) {
+      throw HttpException(
+        'GET /tasks/$taskId/events failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) throw const HttpException('Unexpected task events payload');
+    return decoded.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  // GET /tasks/calculate-cost/{duration_hours}?country=UK
+  static Future<Map<String, dynamic>?> calculateCost(
+    double durationHours, {
+    String country = 'UK',
+  }) async {
+    final hours = durationHours.toStringAsFixed(1);
+    final url = _u('/tasks/calculate-cost/$hours').replace(
+      queryParameters: {'country': country},
+    );
+    try {
+      final res = await callWithRefresh((h) => _get(url, headers: h));
+      if (res.statusCode != 200) return null;
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // PAYMENTS
+  // ---------------------------------------------------------------------------
+
+  // POST /payments/create-intent  →  CreateIntentOut
+  static Future<Map<String, dynamic>> createPaymentIntent({
+    required int amount,
+    required String currency,
+    required String taskId,
+  }) async {
+    final res = await callWithRefresh(
+      (h) => _post(
+        _u('/payments/create-intent'),
+        {'amount': amount, 'currency': currency, 'task_id': taskId},
+        headers: h,
+      ),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'POST /payments/create-intent failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  // POST /payments/capture  →  { task_id }
+  static Future<Map<String, dynamic>> capturePayment(String taskId) async {
+    final res = await callWithRefresh(
+      (h) => _post(_u('/payments/capture'), {'task_id': taskId}, headers: h),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'POST /payments/capture failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  // POST /payments/cancel  →  { task_id }
+  static Future<Map<String, dynamic>> cancelPayment(String taskId) async {
+    final res = await callWithRefresh(
+      (h) => _post(_u('/payments/cancel'), {'task_id': taskId}, headers: h),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'POST /payments/cancel failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  // POST /payments/cod/init  →  COD initiation
+  static Future<Map<String, dynamic>> initCodPayment({
+    required String taskId,
+    required int amount,
+    required String currency,
+  }) async {
+    final res = await callWithRefresh(
+      (h) => _post(
+        _u('/payments/cod/init'),
+        {'task_id': taskId, 'amount': amount, 'currency': currency},
+        headers: h,
+      ),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'POST /payments/cod/init failed: ${res.statusCode} ${_truncate(res.body)}',
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZANCREW — ACTIVE TASK
+  // ---------------------------------------------------------------------------
+
+  // GET /zancrew/active_task  →  { active, task_id?, status?, title? }
+  static Future<Map<String, dynamic>?> getActiveTask() async {
+    try {
+      final res = await callWithRefresh(
+        (h) => _get(_u('/zancrew/active_task'), headers: h),
+      );
+      if (res.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(res.body));
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // POST /auth/refresh  →  { refresh_token }
   // Returns a new TokenPair and updates stored tokens.
   static Future<bool> refreshToken() async {
@@ -662,18 +869,10 @@ class ApiService {
   // GET /auth/me  (requires Bearer token)
   // Returns the current user's profile as a Map, or null on failure.
   static Future<Map<String, dynamic>?> getMe() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
-    if (token == null || token.isEmpty) return null;
-
     try {
-      final res = await httpClient
-          .get(
-            _u('/auth/me'),
-            headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
-          )
-          .timeout(const Duration(seconds: 12));
-
+      final res = await callWithRefresh(
+        (h) => httpClient.get(_u('/auth/me'), headers: h).timeout(const Duration(seconds: 12)),
+      );
       if (res.statusCode == 200) {
         return jsonDecode(res.body) as Map<String, dynamic>;
       }
@@ -789,9 +988,9 @@ class ApiService {
     }
 
     return httpClient.post(
-      Uri.parse('$baseUrl/auth/update-phone/send'),
+      Uri.parse('$baseUrl/auth/change-phone/send-otp'),
       headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
-      body: jsonEncode({'new_phone': newPhone.trim()}),
+      body: jsonEncode({'phone': newPhone.trim()}),
     );
   }
 
@@ -807,9 +1006,9 @@ class ApiService {
     }
 
     final res = await httpClient.post(
-      Uri.parse('$baseUrl/auth/update-phone/verify'),
+      Uri.parse('$baseUrl/auth/change-phone/verify'),
       headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
-      body: jsonEncode({'new_phone': newPhone.trim(), 'code': code.trim()}),
+      body: jsonEncode({'phone': newPhone.trim(), 'code': code.trim()}),
     );
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
