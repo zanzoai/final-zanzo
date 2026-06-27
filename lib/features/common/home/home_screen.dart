@@ -28,6 +28,12 @@ import 'package:zanzo_frontend/features/user/widgets/login_prompt_dialog.dart';
 import 'package:zanzo_frontend/features/zancrew/gateway/zancrew_gateway.dart';
 import 'package:zanzo_frontend/features/zancrew/screens/zancrew_JobDetails.dart';
 
+// Design tokens — scoped to this file
+const _kGround = Color(0xFFFCFAF6);
+const _kInk = Color(0xFF26211C);
+const _kSaffron = Color(0xFFD97706);
+const _kMuted = Color(0xFF8C8378);
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -96,62 +102,50 @@ class _HomeScreenState extends State<HomeScreen>
   );
 
   // ---------------------------------------------------------------------------
-  // EXAMPLES TICKER (auto-type examples)
+  // EXAMPLES TICKER — UK-relevant tasks, global names
   // ---------------------------------------------------------------------------
 
   final List<_Example> _examples = const [
     _Example(
       emoji: '📦',
-      name: 'Ramya',
-      text:
-          'Wait at my flat for fridge delivery, take photos, and place it in the kitchen.',
+      name: 'Emma',
+      text: 'Pick up my parcel from the post office and bring it to my flat.',
     ),
     _Example(
-      emoji: '🛠️',
-      name: 'Ramesh',
-      text:
-          'Supervise the plumber and confirm the leak is fixed with before/after photos.',
+      emoji: '🛒',
+      name: 'John',
+      text: 'Buy groceries from Tesco and deliver them to my address.',
     ),
     _Example(
-      emoji: '📱',
-      name: 'Isha',
-      text:
-          'Collect my repaired phone from the service center and drop it at my office.',
+      emoji: '🛋️',
+      name: 'Maya',
+      text: 'Wait at my flat for a sofa delivery and let the team in.',
     ),
     _Example(
-      emoji: '🪔',
-      name: 'Tanvi',
-      text:
-          'Set up for a small pooja—arrange flowers, stools, and tidy up after.',
+      emoji: '📦',
+      name: 'Oliver',
+      text: 'Help carry two heavy boxes up two flights of stairs.',
     ),
     _Example(
       emoji: '📄',
-      name: 'Nisha',
-      text:
-          'Hold my spot in the bank queue, submit the form, and send receipt photos.',
+      name: 'Sophie',
+      text: 'Collect documents from a nearby office and drop them here.',
     ),
     _Example(
       emoji: '🔑',
-      name: 'Rohit',
+      name: 'Daniel',
       text:
-          'Key handover to a new tenant—verify ID and note electricity meter reading.',
+          'Key handover to a new tenant — verify ID and note the meter reading.',
     ),
     _Example(
-      emoji: '🌐',
-      name: 'Lalita',
-      text:
-          'Wait for broadband installation (3–5 PM), test speed, and save technician contact.',
+      emoji: '📶',
+      name: 'Grace',
+      text: 'Wait for the broadband engineer (9–12 PM) and confirm it works.',
     ),
     _Example(
       emoji: '📸',
-      name: 'Vikram',
-      text: 'Take 10 clear photos of my vacant flat for property listing.',
-    ),
-    _Example(
-      emoji: '📝',
-      name: 'Akhil',
-      text:
-          'Collect documents from the society office and drop them at my lawyer’s.',
+      name: 'Noah',
+      text: 'Take 10 clear photos of my vacant flat for a property listing.',
     ),
   ];
 
@@ -636,74 +630,122 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // BUILD UI (PART 2 COMING NEXT)
+  // BUILD
   // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     final canSend = _controller.text.trim().isNotEmpty && !_isLoading;
-    final shadowLevel = 0.06 + (_glowAnim.value * 0.05);
     final isTyping = _controller.text.trim().isNotEmpty;
 
+    // Responsive vertical spacing — interpolate between iPhone SE (667pt)
+    // and iPhone Pro Max (932pt) so content breathes on tall screens without
+    // leaving a blank void on compact ones.
+    final screenH = MediaQuery.of(context).size.height;
+    final t = ((screenH - 667.0) / 265.0).clamp(0.0, 1.0);
+    final topPad = 48.0 + t * 12.0; // 48–60
+    final heroGap = 10.0 + t * 6.0; // 10–16 — compact so input stays central
+    final promptGap = 12.0 + t * 6.0; // 12–18
+    // Leave room for the active job banner when visible
+    final bottomPad = _activeJobId != null ? 96.0 : 16.0;
+
+    // Hero is supportive — input card is the visual center.
+    final heroFontSize = (22.0 + t * 6.0).clamp(22.0, 28.0);
+    final subtitleFontSize = (12.5 + t * 1.5).clamp(12.5, 14.0);
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: _kGround,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+          padding: const EdgeInsets.symmetric(horizontal: 22.0),
           child: Stack(
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 56),
-                  const Text(
-                    "Zanzo",
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    "Thoughts into Action",
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+              SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                  SizedBox(height: topPad),
+
+                  // ── Compact wordmark with saffron underline ────────────
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Zanzo',
+                        style: TextStyle(
+                          fontSize: 25,
+                          fontWeight: FontWeight.w500,
+                          color: _kInk,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Container(
+                        width: 28,
+                        height: 2.5,
+                        decoration: BoxDecoration(
+                          color: _kSaffron,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ],
                   ),
 
-                  const Spacer(flex: 2),
+                  SizedBox(height: heroGap),
 
-                  const Text(
-                    "Hire a human near you",
+                  // ── Hero ──────────────────────────────────────────────
+                  Text(
+                    'Hire a human\nnear you',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: heroFontSize,
+                      fontWeight: FontWeight.w500,
+                      color: _kInk,
+                      height: 1.05,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Describe what you need—Zanzo turns it into action.",
+                  const SizedBox(height: 12),
+                  Text(
+                    'Describe what you need — Zanzo\nturns it into action.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 15, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: subtitleFontSize,
+                      color: _kMuted,
+                      fontWeight: FontWeight.w400,
+                      height: 1.4,
+                    ),
                   ),
-                  const SizedBox(height: 18),
 
-                  // -----------------------------------------------------------
-                  // INPUT CARD (type or speak)
-                  // -----------------------------------------------------------
+                  SizedBox(height: promptGap),
+
+                  // ── Elevated prompt card ──────────────────────────────
                   AnimatedBuilder(
                     animation: _glowAnim,
                     builder: (context, _) {
                       return Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: Colors.grey.shade200),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(
+                            color: _kInk.withValues(alpha: 0.06),
+                          ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(shadowLevel),
-                              blurRadius: 14 + (8 * _glowAnim.value),
-                              spreadRadius: 0.5 + (0.5 * _glowAnim.value),
-                              offset: Offset(0, 3 + (2 * _glowAnim.value)),
+                              color: Colors.black.withValues(
+                                alpha: 0.08 + (_glowAnim.value * 0.04),
+                              ),
+                              blurRadius: 36 + (10 * _glowAnim.value),
+                              spreadRadius: 0,
+                              offset: Offset(0, 12 + (3 * _glowAnim.value)),
                             ),
                           ],
                         ),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                          horizontal: 16,
+                          vertical: 10,
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.end,
@@ -723,21 +765,45 @@ class _HomeScreenState extends State<HomeScreen>
                                   maxLines: 6,
                                   keyboardType: TextInputType.multiline,
                                   textInputAction: TextInputAction.newline,
+                                  style: const TextStyle(
+                                    color: _kInk,
+                                    fontSize: 15,
+                                    height: 1.4,
+                                  ),
                                   decoration: const InputDecoration(
-                                    hintText: "Type or speak your request…",
+                                    hintText: 'Type or speak your request…',
+                                    hintStyle: TextStyle(
+                                      color: _kMuted,
+                                      fontSize: 15,
+                                    ),
                                     border: InputBorder.none,
                                   ),
                                 ),
                               ),
                             ),
 
-                            // Send arrow — submit the task
-                            IconButton(
-                              icon: const Icon(Icons.arrow_upward_rounded),
-                              onPressed: canSend ? _sendRequest : null,
+                            // Send — saffron circle, only loud pixel on screen
+                            GestureDetector(
+                              onTap: canSend ? _sendRequest : null,
+                              child: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: canSend
+                                      ? _kSaffron
+                                      : _kSaffron.withValues(alpha: 0.3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.arrow_upward_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
                             ),
+                            const SizedBox(width: 6),
 
-                            // Mic — right of arrow for natural L→R: type → send → speak
+                            // Mic — right of send for natural L→R flow
                             _MicButton(
                               isRecording: _voice.isRecording,
                               isLongDictating: _voice.isLongDictating,
@@ -751,21 +817,71 @@ class _HomeScreenState extends State<HomeScreen>
                     },
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
-                  // -----------------------------------------------------------
-                  // SAFETY MESSAGE (only when ok=false)
-                  // -----------------------------------------------------------
+                  // ── Trust strip ───────────────────────────────────────
+                  // Row > Expanded forces tight width onto the Wrap so it
+                  // always knows when to wrap — Column(center) alone gives
+                  // Wrap unbounded width which causes the overflow on narrow
+                  // Android screens.
+                  const Row(
+                    children: [
+                      Expanded(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 14,
+                          runSpacing: 6,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.verified_outlined, size: 12, color: _kMuted),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Verified ZanCrew',
+                                  style: TextStyle(fontSize: 11.5, color: _kMuted),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.lock_outline_rounded, size: 12, color: _kMuted),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Secure payment',
+                                  style: TextStyle(fontSize: 11.5, color: _kMuted),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.my_location_rounded, size: 12, color: _kMuted),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Live tracking',
+                                  style: TextStyle(fontSize: 11.5, color: _kMuted),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // ── Policy message ────────────────────────────────────
                   if (_policyMessage != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 10, bottom: 6),
+                      padding: const EdgeInsets.only(top: 12),
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.08),
+                          color: Colors.red.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.red.withOpacity(0.3),
+                            color: Colors.red.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(
@@ -792,85 +908,13 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                     ),
 
-                  // -----------------------------------------------------------
-                  // EXAMPLES (hide while typing)
-                  // -----------------------------------------------------------
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: isTyping
-                        ? const SizedBox.shrink()
-                        : Column(
-                            key: const ValueKey('examples'),
-                            children: [
-                              GestureDetector(
-                                onTap: _onExampleTap,
-                                behavior: HitTestBehavior.opaque,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 8,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        '${_examples[_exIndex].name} · ${_examples[_exIndex].emoji}  ',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade800,
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: Text(
-                                          _typed.isEmpty
-                                              ? '"${_examples[_exIndex].text}"'
-                                              : '"$_typed"',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey.shade700,
-                                            height: 1.25,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 4),
-
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(_examples.length, (i) {
-                                  final active = i == _exIndex;
-                                  return Container(
-                                    width: active ? 10 : 6,
-                                    height: 6,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: active
-                                          ? Colors.black87
-                                          : Colors.grey.shade400,
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ],
-                          ),
-                  ),
-
-                  if (_voice.isRecording || _voice.isLongDictating)
-                    const SizedBox(height: 10),
-
                   if (_isLoading)
                     const Padding(
                       padding: EdgeInsets.only(top: 10),
-                      child: CircularProgressIndicator(strokeWidth: 2.6),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.6,
+                        color: _kSaffron,
+                      ),
                     ),
 
                   if (_response.isNotEmpty)
@@ -883,56 +927,135 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                     ),
 
-                  const Spacer(flex: 3),
-                ],
-              ),
+                  // Gap trust strip → card: 20 px compact → 44 px large.
+                  SizedBox(height: 20.0 + t * 24.0),
 
-              // -----------------------------------------------------------
-              // EARN BUTTON (top-left)
-              // -----------------------------------------------------------
+                  // ── Happening near you ────────────────────────────────
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: isTyping
+                        ? const SizedBox.shrink()
+                        : _HappeningCard(
+                            key: const ValueKey('happening'),
+                            example: _examples[_exIndex],
+                            typedText: _typed,
+                            onTap: _onExampleTap,
+                          ),
+                  ),
+
+                  SizedBox(height: bottomPad),
+                  ],
+                ), // Column
+              ), // SingleChildScrollView
+
+              // ── Customer / Work segmented pill (top-left) ─────────────
               Positioned(
                 top: 0,
                 left: 0,
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 4.0, top: 4.0),
-                    child: IconButton(
-                      tooltip: 'Earn with Zanzo',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      iconSize: 22,
-                      color: _zancrewStatus == 'active'
-                          ? Colors.green
-                          : Colors.grey.shade800,
-                      icon: const Icon(Icons.work_outline_rounded),
-                      onPressed: _onTapEarn,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _kInk.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Customer — selected state (no-op; already on home)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _kInk,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: const Text(
+                            'Customer',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        // Work — calls existing _onTapEarn()
+                        GestureDetector(
+                          onTap: _onTapEarn,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_zancrewStatus == 'active')
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    margin: const EdgeInsets.only(right: 5),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF4ADE80),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                Text(
+                                  'Work',
+                                  style: TextStyle(
+                                    color: _zancrewEnabled
+                                        ? _kInk
+                                        : _kInk.withValues(alpha: 0.45),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
 
-              // -----------------------------------------------------------
-              // AVATAR BUTTON (top-right)
-              // -----------------------------------------------------------
+              // ── Profile avatar with saffron ring (top-right) ──────────
               Positioned(
-                top: 10,
+                top: 8,
                 right: 0,
                 child: GestureDetector(
                   onTap: _onAvatarTap,
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.grey.shade200,
-                    child: Text(
-                      _avatarInitial,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _kSaffron,
+                        width: 2,
+                      ),
+                      color: Colors.white,
+                    ),
+                    child: Center(
+                      child: Text(
+                        _avatarInitial,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _kInk,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
 
-              // -----------------------------------------------------------
-              // ACTIVE JOB CTA (bottom floating card, hidden when keyboard open)
-              // -----------------------------------------------------------
+              // ── Active job banner (bottom) — logic untouched ───────────
               if (_activeJobId != null &&
                   MediaQuery.of(context).viewInsets.bottom == 0)
                 Positioned(
@@ -997,7 +1120,7 @@ class _MicButton extends StatelessWidget {
           IconButton(
             icon: Icon(
               active ? Icons.stop_rounded : Icons.mic_none_rounded,
-              color: Colors.black87,
+              color: _kInk,
               size: 26,
             ),
             onPressed: onPressed,
@@ -1009,9 +1132,9 @@ class _MicButton extends StatelessWidget {
                 secondsRemaining > 30
                     ? 'Listening…'
                     : _fmtSecs(secondsRemaining),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 10,
-                  color: Colors.grey.shade500,
+                  color: _kMuted,
                   letterSpacing: 0.3,
                 ),
               ),
@@ -1029,6 +1152,147 @@ class _Example {
   final String text;
 
   const _Example({required this.name, required this.emoji, required this.text});
+}
+
+// ===========================================================================
+// HAPPENING NEAR YOU CARD — social-proof example, pure display widget
+// Shows the currently-cycling example with typewriter text. Tap fills input.
+// ===========================================================================
+
+class _HappeningCard extends StatelessWidget {
+  final _Example example;
+  final String typedText;
+  final VoidCallback onTap;
+
+  const _HappeningCard({
+    super.key,
+    required this.example,
+    required this.typedText,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'HAPPENING NEAR YOU',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: _kMuted,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _kInk.withValues(alpha: 0.08)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Name initial avatar
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: _kInk,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      example.name[0],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Name + live dot + task text
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            example.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: _kInk,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF4ADE80),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            example.emoji,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        typedText.isEmpty ? example.text : typedText,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _kMuted,
+                          height: 1.35,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 10),
+                // Use action
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Text(
+                    'Use →',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _kSaffron,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // ===========================================================================

@@ -19,7 +19,9 @@ class ApiService {
   //  "https://zanzo-uk-backend-production-b2d0.up.railway.app/api/v1";
 
   static const String baseUrl =
-      "https://test-geo-location-production.up.railway.app/api/v1";
+      "https://zanzo-test-production.up.railway.app/api/v1";
+
+  //"https://test-geo-location-production.up.railway.app/api/v1";
 
   /// Backend base URL (LAN/IP for local device testing)
   // static const String baseUrl = "http://192.168.193.93:8000";
@@ -667,9 +669,9 @@ class ApiService {
     int limit = 20,
     int offset = 0,
   }) async {
-    final url = _u('/tasks/my').replace(
-      queryParameters: {'limit': '$limit', 'offset': '$offset'},
-    );
+    final url = _u(
+      '/tasks/my',
+    ).replace(queryParameters: {'limit': '$limit', 'offset': '$offset'});
     final res = await callWithRefresh((h) => _get(url, headers: h));
     if (res.statusCode != 200) {
       throw HttpException(
@@ -677,8 +679,11 @@ class ApiService {
       );
     }
     final decoded = jsonDecode(res.body);
-    if (decoded is! List) throw const HttpException('Unexpected tasks/my payload');
-    return decoded.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+    if (decoded is! List)
+      throw const HttpException('Unexpected tasks/my payload');
+    return decoded
+        .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
   }
 
   // GET /tasks/{task_id}/events  →  List[TaskEventOut]
@@ -692,8 +697,11 @@ class ApiService {
       );
     }
     final decoded = jsonDecode(res.body);
-    if (decoded is! List) throw const HttpException('Unexpected task events payload');
-    return decoded.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+    if (decoded is! List)
+      throw const HttpException('Unexpected task events payload');
+    return decoded
+        .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
   }
 
   // GET /tasks/calculate-cost/{duration_hours}?country=UK
@@ -702,9 +710,9 @@ class ApiService {
     String country = 'UK',
   }) async {
     final hours = durationHours.toStringAsFixed(1);
-    final url = _u('/tasks/calculate-cost/$hours').replace(
-      queryParameters: {'country': country},
-    );
+    final url = _u(
+      '/tasks/calculate-cost/$hours',
+    ).replace(queryParameters: {'country': country});
     try {
       final res = await callWithRefresh((h) => _get(url, headers: h));
       if (res.statusCode != 200) return null;
@@ -725,11 +733,11 @@ class ApiService {
     required String taskId,
   }) async {
     final res = await callWithRefresh(
-      (h) => _post(
-        _u('/payments/create-intent'),
-        {'amount': amount, 'currency': currency, 'task_id': taskId},
-        headers: h,
-      ),
+      (h) => _post(_u('/payments/create-intent'), {
+        'amount': amount,
+        'currency': currency,
+        'task_id': taskId,
+      }, headers: h),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
@@ -772,11 +780,11 @@ class ApiService {
     required String currency,
   }) async {
     final res = await callWithRefresh(
-      (h) => _post(
-        _u('/payments/cod/init'),
-        {'task_id': taskId, 'amount': amount, 'currency': currency},
-        headers: h,
-      ),
+      (h) => _post(_u('/payments/cod/init'), {
+        'task_id': taskId,
+        'amount': amount,
+        'currency': currency,
+      }, headers: h),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
@@ -871,7 +879,9 @@ class ApiService {
   static Future<Map<String, dynamic>?> getMe() async {
     try {
       final res = await callWithRefresh(
-        (h) => httpClient.get(_u('/auth/me'), headers: h).timeout(const Duration(seconds: 12)),
+        (h) => httpClient
+            .get(_u('/auth/me'), headers: h)
+            .timeout(const Duration(seconds: 12)),
       );
       if (res.statusCode == 200) {
         return jsonDecode(res.body) as Map<String, dynamic>;

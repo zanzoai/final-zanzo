@@ -1,14 +1,10 @@
-// This file provides the job-based chat screen, handling message loading, polling, sending text/images,
-// aligning bubbles by sender, and keeping scroll at the bottom.
-
 // lib/features/common/chat/chat_screen.dart
-
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/messages_api.dart';
+import 'package:zanzo_frontend/core/services/task_chat_ws_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final String jobId;
@@ -31,11 +27,12 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scroll = ScrollController();
   final ImagePicker _picker = ImagePicker();
 
+  late final TaskChatWsService _wsChat;
+
   List<ChatMessage> _messages = [];
   String? _viewerUserId;
   bool _loading = true;
   bool _sending = false;
-  Timer? _poll;
 
   @override
   void initState() {
@@ -44,46 +41,43 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // 1) INITIAL BOOTSTRAP → Determine viewer, load first messages, start polling
+  // 1) BOOTSTRAP — resolve viewer, start WS (history arrives in connected frame)
   // ---------------------------------------------------------------------------
   Future<void> _bootstrap() async {
     _viewerUserId = widget.viewerUserId;
-
     if (_viewerUserId == null) {
       final prefs = await SharedPreferences.getInstance();
       _viewerUserId = prefs.getString('user_id');
     }
 
-    await _refresh();
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
+    _wsChat = TaskChatWsService(widget.jobId);
+    _wsChat.addListener(_onWsUpdate);
+    await _wsChat.connect();
   }
 
   // ---------------------------------------------------------------------------
-  // 2) LOAD MESSAGES (polling every 2 seconds)
+  // 2) WS LISTENER — called by notifyListeners() on every event
   // ---------------------------------------------------------------------------
-  Future<void> _refresh() async {
-    try {
-      final list = await MessagesApi.listByJob(widget.jobId);
-      if (!mounted) return;
+  void _onWsUpdate() {
+    if (!mounted) return;
+    setState(() {
+      _messages = _wsChat.messages;
+      // Clear loading once the connected frame has been received.
+      if (_wsChat.isConnected) _loading = false;
+    });
+    _scrollToBottom();
+  }
 
-      setState(() {
-        _messages = list;
-        _loading = false;
-      });
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scroll.hasClients) {
-          _scroll.jumpTo(_scroll.position.maxScrollExtent);
-        }
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
-  // 3) SEND TEXT MESSAGE
+  // 3) SEND TEXT MESSAGE (REST — WS pushes the echo back via message.new)
   // ---------------------------------------------------------------------------
   Future<void> _sendText() async {
     final text = _input.text.trim();
@@ -99,8 +93,8 @@ class _ChatScreenState extends State<ChatScreen> {
         senderUserId: _viewerUserId!,
         content: text,
       );
-
-      await _refresh();
+      // WS message.new will push the echo; scroll proactively.
+      _scrollToBottom();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -167,8 +161,8 @@ class _ChatScreenState extends State<ChatScreen> {
         fileExt: ext,
         caption: caption,
       );
-
-      await _refresh();
+      // WS message.new will push the echo; scroll proactively.
+      _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -181,7 +175,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _wsChat.removeListener(_onWsUpdate);
+    _wsChat.dispose();
     _input.dispose();
     _scroll.dispose();
     super.dispose();

@@ -6,10 +6,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-// Core services
 import 'package:zanzo_frontend/core/services/api_service.dart';
-// User feature screens
+import 'package:zanzo_frontend/core/services/task_events_ws_service.dart';
 import 'package:zanzo_frontend/features/common/chat/chat_screen.dart';
 
 class TrackJobScreen extends StatefulWidget {
@@ -96,10 +94,16 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   bool _loading = false;
 
   // ---------------- Realtime + polling ----------------
-  StreamSubscription<List<Map<String, dynamic>>>? _sub;
+  TaskEventsWsService? _wsTask;
   Timer? _simTimer;
   Timer? _pollTimer;
   Timer? _sessionTimer;
+
+  // Latest crew location from WS (scaffolded for future map view).
+  // ignore: unused_field
+  double? _crewLat;
+  // ignore: unused_field
+  double? _crewLng;
 
   // Subtle pulse for current stage (tiny, premium)
   Timer? _pulseTimer;
@@ -128,7 +132,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     if (widget.jobId != null && widget.jobId!.isNotEmpty) {
       _fetchCurrentStatus();
       _startPolling();
-
+      _startWs(widget.jobId!);
       _loadSession();
     } else {
       _startProgressSimulation();
@@ -166,31 +170,22 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     }
   }
 
-  void _startRealtime() {
-    final supabase = Supabase.instance.client;
-    _sub = supabase
-        .from('jobs')
-        .stream(primaryKey: ['id'])
-        .eq('id', widget.jobId!)
-        .listen(
-          (rows) async {
-            if (rows.isEmpty) return;
-
-            final latest = rows.last;
-            final newStatus = latest['status'];
-            final oldStage = currentStage;
-
-            _updateStageFromStatus(newStatus);
-
-            final norm = _normalize(newStatus);
-            if (_isAtOrAfterAssigned(norm) && oldStage < 1) {
-              await _ensureAssigneeFetched();
-            }
-          },
-          onError: (_) {
-            _cancelRealtime();
-          },
-        );
+  void _startWs(String jobId) {
+    _wsTask = TaskEventsWsService(jobId)
+      ..onStatusChanged = (status, note) {
+        _updateStageFromStatus(status);
+        if (_isAtOrAfterAssigned(_normalize(status))) {
+          _ensureAssigneeFetched();
+        }
+      }
+      ..onCrewLocation = (lat, lng) {
+        if (!mounted) return;
+        setState(() {
+          _crewLat = lat;
+          _crewLng = lng;
+        });
+      };
+    _wsTask!.connect();
   }
 
   void _startPolling() {
@@ -364,11 +359,6 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     }
   }
 
-  void _cancelRealtime() {
-    _sub?.cancel();
-    _sub = null;
-  }
-
   void _startProgressSimulation() {
     _simTimer?.cancel();
     _simTimer = Timer.periodic(const Duration(seconds: 7), (timer) {
@@ -386,8 +376,8 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     _simTimer?.cancel();
     _pollTimer?.cancel();
     _pulseTimer?.cancel();
-    _cancelRealtime();
     _sessionTimer?.cancel();
+    _wsTask?.dispose();
     super.dispose();
   }
 
