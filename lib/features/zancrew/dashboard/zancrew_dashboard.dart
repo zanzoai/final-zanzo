@@ -23,6 +23,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'; // ⭐ Supabase for rea
 import 'package:zanzo_frontend/core/services/zancrew_earnings_service.dart';
 
 import '../../../core/services/api_service.dart';
+import '../../../core/services/crew_offers_ws_service.dart';
 import '../../../core/services/uk_provider_api.dart';
 import '../../../core/services/zancrew_api.dart';
 import '../onboarding/uk_bank_details_screen.dart';
@@ -70,9 +71,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     'Assembly',
   ];
 
-  // ⭐ Realtime subscription channel handles
+  // ⭐ Realtime subscription channel handles (Supabase — kept for earnings)
   RealtimeChannel? _earningsChannel;
   RealtimeChannel? _jobEventsChannel;
+
+  // WS offer fanout
+  CrewOffersWsService? _wsOffers;
 
   // 🔔 FCM token refresh subscription
   StreamSubscription<String>? _fcmRefreshSub;
@@ -367,6 +371,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
       _startLocationUpdates();
       _refreshOffers(status: _currentTab);
+      _connectOffersWs();
     } else {
       // Still refresh earnings even if offline, so earnings card is always current
       _recalculateTodayEarningsFromOffers(_currentTab);
@@ -546,14 +551,34 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     if (_online) {
       _startLocationUpdates();
       _refreshOffers(status: _currentTab);
+      _connectOffersWs();
     } else {
       _locationTimer?.cancel();
+      _disconnectOffersWs();
     }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(v ? 'You are now ONLINE' : 'You are OFFLINE')),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CREW OFFERS WEBSOCKET
+  // ---------------------------------------------------------------------------
+  void _connectOffersWs() {
+    _wsOffers?.dispose();
+    final svc = CrewOffersWsService();
+    svc.onOfferReceived = (_) => _refreshOffers(status: 'offered');
+    svc.onOfferExpired = (_) => _refreshOffers(status: _currentTab);
+    svc.onTaskCancelled = (_) => _refreshOffers(status: _currentTab);
+    svc.connect();
+    _wsOffers = svc;
+  }
+
+  void _disconnectOffersWs() {
+    _wsOffers?.dispose();
+    _wsOffers = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -627,6 +652,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     _jobEventsChannel?.unsubscribe();
     _fcmRefreshSub?.cancel();
     _fcmOpenedSub?.cancel();
+    _wsOffers?.dispose();
     super.dispose();
   }
 
