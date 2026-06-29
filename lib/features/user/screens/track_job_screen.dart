@@ -112,19 +112,26 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   Map<String, dynamic>? _assignedCrew;
 
   // ---------------- Theme tokens ----------------
-  static const Color _brand = Color(0xFF6C4DFF); // use your brand purple
-  static const Color _bg = Color(0xFFF6F7FB);
-  static const Color _text = Color(0xFF111827);
-  static const Color _muted = Color(0xFF6B7280);
-  static const Color _success = Color(0xFF16A34A);
-  static const Color _warning = Color(0xFFF59E0B);
+  static const Color _accent = Color(
+    0xFFD97706,
+  ); // saffron — matches home/review
+  static const Color _bg = Color(0xFFFCFAF6); // warm off-white
+  static const Color _surface = Color(
+    0xFFF5F2EE,
+  ); // warm surface for pills/badges
+  static const Color _card = Colors.white;
+  static const Color _ink = Color(0xFF26211C); // warm charcoal
+  static const Color _muted = Color(0xFF8C8378); // warm muted
+  static const Color _line = Color(0xFFE8E2D9); // warm divider
+  static const Color _success = Color(0xFF16A34A); // green — completed only
+  static const Color _warning = Color(0xFFF59E0B); // amber — in-progress
 
   @override
   void initState() {
     super.initState();
     _assignedCrew = widget.assignedCrew;
 
-    _pulseTimer = Timer.periodic(const Duration(milliseconds: 1100), (_) {
+    _pulseTimer = Timer.periodic(const Duration(milliseconds: 900), (_) {
       if (!mounted) return;
       setState(() => _pulse = !_pulse);
     });
@@ -298,6 +305,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
 
     if (!mounted) return;
     final wasSearching = _jobStatus == 'searching';
+    final prevStatus = _jobStatus;
     setState(() {
       if (idx != null && idx != currentStage) currentStage = idx;
       _jobStatus = status;
@@ -311,6 +319,15 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
           duration: Duration(seconds: 4),
         ),
       );
+    }
+    // Refresh session flags when status transitions to in_progress or completed/settled,
+    // so Start/End PIN verified state reflects the backend immediately without needing
+    // the user to tap "Update". Only fires on a status change, not every poll tick.
+    if (prevStatus != status &&
+        (status == 'in_progress' ||
+            status == 'completed' ||
+            status == 'settled')) {
+      _loadSession();
     }
   }
 
@@ -347,15 +364,15 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         Navigator.of(context).popUntil((route) => route.isFirst);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cancel failed: ${res.body}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Cancel failed: ${res.body}')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cancel failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Cancel failed: $e')));
     }
   }
 
@@ -389,19 +406,26 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        title: const Text("Live tracking"),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: _text,
-        elevation: 0.6,
+        title: const Text(
+          "Live tracking",
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        backgroundColor: _bg,
+        foregroundColor: _ink,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
             tooltip: "Refresh",
             icon: _loading
-                ? const SizedBox(
+                ? SizedBox(
                     height: 18,
                     width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _accent,
+                    ),
                   )
                 : const Icon(Icons.refresh_rounded),
             onPressed: _loading ? null : _fetchCurrentStatus,
@@ -479,10 +503,10 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                 padding: const EdgeInsets.fromLTRB(18, 6, 18, 10),
                 child: Text(
                   "Progress",
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16.5,
                     fontWeight: FontWeight.w800,
-                    color: _text,
+                    color: _ink,
                   ),
                 ),
               ),
@@ -511,10 +535,10 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
           widget.taskTitle.trim().isEmpty
               ? "Your job"
               : widget.taskTitle.trim(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20.5,
             fontWeight: FontWeight.w800,
-            color: _text,
+            color: _ink,
             height: 1.15,
           ),
         ),
@@ -545,33 +569,49 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   // Premium reassurance banner: tells user what's happening NOW
   Widget _statusBanner({required bool isTaskComplete}) {
     final String label = _currentStatusLabel();
-    final Color tint = isTaskComplete
-        ? const Color(0xFFE8F5E9)
-        : const Color(0xFFF3F4F6);
-    final Color dot = isTaskComplete ? _success : _brand;
+    final Color tint = isTaskComplete ? const Color(0xFFE8F5E9) : _surface;
+    // Pulse the dot for active (non-complete) states only
+    final double dotSize = (!isTaskComplete && _pulse) ? 11.0 : 9.0;
+    final double glowRadius = (!isTaskComplete && _pulse) ? 8.0 : 0.0;
 
     return Container(
       decoration: BoxDecoration(
         color: tint,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(
+          color: isTaskComplete ? _success.withValues(alpha: 0.25) : _line,
+        ),
       ),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Row(
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 10),
+          // Completed: static green check. Active: pulsing saffron dot.
+          if (isTaskComplete)
+            Icon(Icons.check_circle_rounded, size: 20, color: _success)
+          else
+            Container(
+              width: dotSize,
+              height: dotSize,
+              decoration: BoxDecoration(
+                color: _accent,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withValues(alpha: glowRadius > 0 ? 0.35 : 0),
+                    blurRadius: glowRadius,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14.5,
                 fontWeight: FontWeight.w700,
-                color: _text,
+                color: isTaskComplete ? _success : _ink,
               ),
             ),
           ),
@@ -583,6 +623,9 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                   context,
                 ).showSnackBar(const SnackBar(content: Text('Updated')));
             },
+            style: TextButton.styleFrom(
+              foregroundColor: isTaskComplete ? _success : _accent,
+            ),
             child: const Text("Update"),
           ),
         ],
@@ -591,12 +634,11 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   }
 
   String _currentStatusLabel() {
-    // Make it feel human and reassuring
     switch (currentStage) {
       case 0:
-        return "Looking for a nearby ZenCrew partner";
+        return "Looking for a nearby ZanCrew partner";
       case 1:
-        return "A ZenCrew partner accepted your job";
+        return "A ZanCrew partner accepted your job";
       case 2:
         return "Your partner is on the way";
       case 3:
@@ -626,13 +668,13 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
               children: [
                 CircleAvatar(
                   radius: 22,
-                  backgroundColor: _brand.withOpacity(0.12),
+                  backgroundColor: _accent.withValues(alpha: 0.12),
                   child: Text(
                     hasName ? name.characters.first.toUpperCase() : 'Z',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: _brand,
+                      color: _accent,
                     ),
                   ),
                 ),
@@ -642,11 +684,11 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        hasName ? name : "ZenCrew partner",
-                        style: const TextStyle(
+                        hasName ? name : "ZanCrew partner",
+                        style: TextStyle(
                           fontSize: 16.8,
                           fontWeight: FontWeight.w800,
-                          color: _text,
+                          color: _ink,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -654,7 +696,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                         hasName
                             ? "Verified partner"
                             : "Assigning a partner soon",
-                        style: const TextStyle(fontSize: 13.5, color: _muted),
+                        style: TextStyle(fontSize: 13.5, color: _muted),
                       ),
                     ],
                   ),
@@ -663,7 +705,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                   tooltip: "Message",
                   onPressed: _openChat,
                   icon: const Icon(Icons.chat_bubble_outline_rounded),
-                  color: _brand,
+                  color: _ink,
                 ),
               ],
             ),
@@ -675,19 +717,19 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                 _pill(
                   icon: Icons.star_rounded,
                   label: "4.6",
-                  tint: const Color(0xFFFFF7ED),
+                  tint: const Color(0xFFFFF3E9),
                   fg: _warning,
                 ),
                 _pill(
                   icon: Icons.verified_rounded,
                   label: "Bank",
-                  tint: const Color(0xFFF3F4F6),
+                  tint: _surface,
                   fg: _muted,
                 ),
                 _pill(
                   icon: Icons.verified_rounded,
                   label: "KYC",
-                  tint: const Color(0xFFF3F4F6),
+                  tint: _surface,
                   fg: _muted,
                 ),
               ],
@@ -702,12 +744,15 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   Widget _pinsCard() {
     final hasStart = (_startPin != null && _startPin!.isNotEmpty);
     final endShown = (_endPin != null && _endPin!.isNotEmpty);
-    final isActive = (_startConfirmedAt != null && _endConfirmedAt == null);
-    final isCompleted = (_endConfirmedAt != null);
+    // Badge driven by session-verified flags (loaded from backend via _loadSession).
+    // _startConfirmedAt/_endConfirmedAt are never populated by the current session
+    // endpoint, so use the verified boolean flags instead.
+    final isActive = (_startPinUsed && !_endPinUsed);
+    final isCompleted = _endPinUsed;
 
     String minsLabel() {
       if (_minutesWorked > 0) return '$_minutesWorked min';
-      if (_startConfirmedAt != null && _endConfirmedAt == null) return 'Live';
+      if (_startPinUsed && !_endPinUsed) return 'Live';
       return '--';
     }
 
@@ -717,7 +762,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     final badgeColor = isCompleted ? _success : (isActive ? _warning : _muted);
     final badgeBg = isCompleted
         ? const Color(0xFFE8F5E9)
-        : (isActive ? const Color(0xFFFFF7ED) : const Color(0xFFF3F4F6));
+        : (isActive ? const Color(0xFFFFF3E9) : _surface);
 
     return _softCard(
       child: Padding(
@@ -727,14 +772,14 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.lock_outline_rounded, color: _brand, size: 20),
+                Icon(Icons.lock_outline_rounded, color: _accent, size: 20),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   "Job PINs",
                   style: TextStyle(
                     fontSize: 16.2,
                     fontWeight: FontWeight.w900,
-                    color: _text,
+                    color: _ink,
                   ),
                 ),
                 const Spacer(),
@@ -746,7 +791,9 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                   decoration: BoxDecoration(
                     color: badgeBg,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: badgeColor.withOpacity(0.25)),
+                    border: Border.all(
+                      color: badgeColor.withValues(alpha: 0.25),
+                    ),
                   ),
                   child: Text(
                     badgeText,
@@ -759,13 +806,13 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
             _pinRow(
               label: "Start PIN",
               value: hasStart ? _startPin! : "—",
               verified: _startPinUsed,
-              help: "Share when partner arrives",
+              help: "Share when your partner arrives",
               emphasize: hasStart,
             ),
             const SizedBox(height: 10),
@@ -773,21 +820,52 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
               label: "End PIN",
               value: endShown ? _endPin! : "—",
               verified: _endPinUsed,
-              help: endShown ? "Share on completion" : "Visible after start",
+              help: endShown
+                  ? "Share when the task is finished"
+                  : "Visible once work begins",
               emphasize: endShown,
             ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Row(
               children: [
-                const Icon(Icons.timer_outlined, size: 18, color: _muted),
+                Icon(Icons.timer_outlined, size: 18, color: _muted),
                 const SizedBox(width: 6),
                 Text(
                   "Time: ${minsLabel()}",
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.8,
                     fontWeight: FontWeight.w700,
-                    color: _text,
+                    color: _ink,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 14),
+            Divider(color: _line, height: 1),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  isCompleted
+                      ? Icons.check_circle_outline_rounded
+                      : Icons.lock_rounded,
+                  size: 13,
+                  color: isCompleted ? _success : _muted,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    isCompleted
+                        ? "Job complete. Payment will be released to your partner."
+                        : "Payment held securely until your job is complete.",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isCompleted ? _success : _muted,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ],
@@ -806,7 +884,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     required bool emphasize,
   }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: Column(
@@ -814,30 +892,38 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w800,
-                  color: _text,
+                  color: _ink,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(help, style: const TextStyle(fontSize: 12.5, color: _muted)),
+              const SizedBox(height: 3),
+              Text(help, style: TextStyle(fontSize: 12.5, color: _muted)),
             ],
           ),
         ),
         const SizedBox(width: 10),
         Row(
           children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: emphasize ? 18 : 15,
-                fontWeight: emphasize ? FontWeight.w900 : FontWeight.w700,
-                color: emphasize ? _text : _muted,
-                letterSpacing: emphasize ? 2.0 : 0.2,
-                fontFeatures: emphasize
-                    ? const [FontFeature.tabularFigures()]
-                    : const [],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: emphasize ? _surface : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: emphasize ? Border.all(color: _line) : null,
+              ),
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: emphasize ? 18 : 15,
+                  fontWeight: emphasize ? FontWeight.w900 : FontWeight.w600,
+                  color: emphasize ? _ink : _muted,
+                  letterSpacing: emphasize ? 2.5 : 0.2,
+                  fontFeatures: emphasize
+                      ? const [FontFeature.tabularFigures()]
+                      : const [],
+                ),
               ),
             ),
             if (verified) ...[
@@ -870,10 +956,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                 const SizedBox(width: 8),
                 Text(
                   (_endConfirmedAt == null) ? "Time progress" : "Time summary",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: _text,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w900, color: _ink),
                 ),
                 const Spacer(),
                 Text(
@@ -891,8 +974,8 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
               child: LinearProgressIndicator(
                 value: v,
                 minHeight: 9,
-                backgroundColor: Colors.black.withOpacity(0.06),
-                valueColor: const AlwaysStoppedAnimation<Color>(_brand),
+                backgroundColor: _line,
+                valueColor: AlwaysStoppedAnimation<Color>(_accent),
               ),
             ),
           ],
@@ -918,13 +1001,18 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       "Job completed",
     ];
 
+    // When all stages are done, count the final step as reached too so
+    // it shows a check rather than a pulsing dot.
+    final isComplete = currentStage == baseStages.length - 1;
+
     return _softCard(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
         child: Column(
           children: List.generate(stages.length, (i) {
-            final reached = i < currentStage;
-            final isCurrent = i == currentStage;
+            final reached =
+                i < currentStage || (isComplete && i == currentStage);
+            final isCurrent = !isComplete && i == currentStage;
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -956,9 +1044,9 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                             ? FontWeight.w800
                             : FontWeight.w600,
                         color: reached
-                            ? _text
+                            ? _ink
                             : isCurrent
-                            ? _text
+                            ? _ink
                             : _muted,
                       ),
                     ),
@@ -973,10 +1061,12 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   }
 
   Widget _timelineNode({required bool reached, required bool isCurrent}) {
-    final Color ring = reached ? _brand : Colors.black.withOpacity(0.18);
-    final Color fill = reached ? _brand : Colors.white;
+    final Color ring = reached
+        ? _accent
+        : const Color(0xFFE8E2D9); // _line equivalent
+    final Color fill = reached ? _accent : Colors.white;
 
-    final double glow = isCurrent ? (_pulse ? 0.22 : 0.10) : 0.0;
+    final double glow = isCurrent ? (_pulse ? 0.30 : 0.12) : 0.0;
 
     return Container(
       width: 18,
@@ -988,7 +1078,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         boxShadow: [
           if (isCurrent)
             BoxShadow(
-              color: _brand.withOpacity(glow),
+              color: _accent.withValues(alpha: glow),
               blurRadius: 10,
               spreadRadius: 1,
             ),
@@ -1001,8 +1091,8 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   }
 
   Widget _timelineLine({required bool reached, required bool isCurrent}) {
-    final Color c = reached ? _brand : Colors.black.withOpacity(0.12);
-    final double glow = isCurrent ? (_pulse ? 0.18 : 0.08) : 0.0;
+    final Color c = reached ? _accent : _line;
+    final double glow = isCurrent ? (_pulse ? 0.22 : 0.08) : 0.0;
 
     return Container(
       width: 4,
@@ -1014,7 +1104,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         boxShadow: [
           if (isCurrent)
             BoxShadow(
-              color: _brand.withOpacity(glow),
+              color: _accent.withValues(alpha: glow),
               blurRadius: 10,
               spreadRadius: 1,
             ),
@@ -1027,12 +1117,12 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   Widget _softCard({required Widget child}) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _card,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.black.withOpacity(0.06)),
+        border: Border.all(color: _line),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1053,7 +1143,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       decoration: BoxDecoration(
         color: tint,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.black.withOpacity(0.06)),
+        border: Border.all(color: _line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1062,10 +1152,10 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: _text,
+              color: _ink,
             ),
           ),
         ],
