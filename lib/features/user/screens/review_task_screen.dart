@@ -63,6 +63,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
   double _durationHours = 0.5;
   DateTime? _scheduledAt;
   bool _isProcessing = false;
+  bool _postPayment = false; // true after Stripe sheet closes, until navigation
 
   // Pickup
   bool _hasPickup = false;
@@ -84,13 +85,24 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
   double? _selectedLat;
   double? _selectedLng;
 
-  // ========================= THEME (CALM + CLASSIC) =========================
-  static const Color _accent = Color(0xFFFF8A3D); // calmer orange
-  static const Color _bg = Color(0xFFF7F7F9);
+  // ========================= THEME (WARM / MATCHES HOME SCREEN) =========================
+  static const Color _accent = Color(
+    0xFFD97706,
+  ); // saffron — matches home screen
+  static const Color _bg = Color(
+    0xFFFCFAF6,
+  ); // warm off-white — matches home screen
+  static const Color _surface = Color(
+    0xFFF5F2EE,
+  ); // warm surface for inputs / pills
   static const Color _card = Colors.white;
-  static const Color _ink = Color(0xFF101114);
-  static const Color _muted = Color(0xFF6C717A);
-  static const Color _line = Color(0xFFE7E8EC);
+  static const Color _ink = Color(
+    0xFF26211C,
+  ); // warm charcoal — matches home screen
+  static const Color _muted = Color(
+    0xFF8C8378,
+  ); // warm muted — matches home screen
+  static const Color _line = Color(0xFFE8E2D9); // warm divider
 
   // ========================= INIT =========================
   @override
@@ -440,12 +452,45 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       initialDate: now,
       firstDate: now,
       lastDate: now.add(const Duration(days: 7)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: _accent,
+              onPrimary: Colors.white,
+              surface: _card,
+              onSurface: _ink,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: _accent),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (pickedDate == null) return;
 
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
+      initialEntryMode: TimePickerEntryMode.input,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: _accent,
+              onPrimary: Colors.white,
+              surface: _card,
+              onSurface: _ink,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: _accent),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (pickedTime == null) return;
 
@@ -507,29 +552,29 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         Uri.parse("${ApiService.baseUrl}/tasks/"),
         headers: h,
         body: jsonEncode({
-        "title": _conciseTitle,
-        "polished_task": _taskController.text,
+          "title": _conciseTitle,
+          "polished_task": _taskController.text,
 
-        // DELIVERY / RETURN ADDRESS
-        "location_address": _locationController.text,
-        "latitude": _selectedLat,
-        "longitude": _selectedLng,
+          // DELIVERY / RETURN ADDRESS
+          "location_address": _locationController.text,
+          "latitude": _selectedLat,
+          "longitude": _selectedLng,
 
-        // PICKUP FIELDS
-        "pickup_address": _hasPickup ? _pickupController.text : null,
-        "pickup_latitude": _hasPickup ? _pickupLat : null,
-        "pickup_longitude": _hasPickup ? _pickupLng : null,
+          // PICKUP FIELDS
+          "pickup_address": _hasPickup ? _pickupController.text : null,
+          "pickup_latitude": _hasPickup ? _pickupLat : null,
+          "pickup_longitude": _hasPickup ? _pickupLng : null,
 
-        // OTHER FIELDS
-        "scheduled_at": scheduledAtIso,
-        "duration_hours": _durationHours,
-        "people_required": _peopleCount,
-        "estimated_amount": _estimatedCost,
-        "currency": _currencyCode.toLowerCase(),
-        "notes": notesText,
-        "actions": _actions,
-        "tags": _tags,
-      }),
+          // OTHER FIELDS
+          "scheduled_at": scheduledAtIso,
+          "duration_hours": _durationHours,
+          "people_required": _peopleCount,
+          "estimated_amount": _estimatedCost,
+          "currency": _currencyCode.toLowerCase(),
+          "notes": notesText,
+          "actions": _actions,
+          "tags": _tags,
+        }),
       ),
     );
 
@@ -620,6 +665,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       print('🔷 [Stripe] presentPaymentSheet — isProcessing=$_isProcessing');
       await Stripe.instance.presentPaymentSheet();
       print('🟢 [Stripe] presentPaymentSheet completed successfully');
+
+      // Show post-payment overlay while stripe-authorized call and navigation settle.
+      if (mounted) setState(() => _postPayment = true);
 
       // Notify backend that Stripe has authorized the card (PI is requires_capture).
       // This sets payments.status='authorized', payments.gateway='stripe',
@@ -785,7 +833,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: bg ?? const Color(0xFFF1F2F5),
+        color: bg ?? _surface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: _line),
       ),
@@ -840,7 +888,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
-            color: const Color(0xFFF1F2F5),
+            color: _surface,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: _line),
           ),
@@ -901,7 +949,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F2F5),
+        color: _surface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: _line),
       ),
@@ -949,7 +997,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
   // ========================= UI =========================
   @override
   Widget build(BuildContext context) {
-    final payDisabled = _isProcessing;
+    final payDisabled = _isProcessing || _postPayment;
 
     final String primaryCtaText = _isNow
         ? "Confirm & Start • ${_formatAmount(_estimatedCost)}"
@@ -962,8 +1010,10 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       backgroundColor: _bg,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: _accent,
-        foregroundColor: Colors.white,
+        scrolledUnderElevation: 0,
+        backgroundColor: _bg,
+        foregroundColor: _ink,
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           "Review",
           style: TextStyle(fontWeight: FontWeight.w800),
@@ -985,13 +1035,21 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      "You’re in control — confirm to pay",
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: _muted,
-                      ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.lock_rounded, size: 13, color: _muted),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            "Held securely until a ZanCrew accepts.",
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: _muted,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Text(
@@ -1020,7 +1078,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
                     ),
                   ),
                   onPressed: payDisabled ? null : _makePaymentFlow,
-                  child: _isProcessing
+                  child: (_isProcessing || _postPayment)
                       ? const SizedBox(
                           width: 22,
                           height: 22,
@@ -1053,669 +1111,805 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         ),
       ),
 
-      body: SingleChildScrollView(
-        padding: _pagePad,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ========================= APPROVAL SUMMARY (TOP) =========================
-            _cardShell(
+      body: _postPayment
+          ? Material(
+              color: _bg,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 36),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: _accent,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        "Setting up live tracking…",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                          color: _ink,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        "Your payment is secure. We're creating your job.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _muted,
+                          fontWeight: FontWeight.w500,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: _pagePad,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "Summary",
-                    style: TextStyle(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w900,
-                      color: _ink,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Title (primary anchor)
-                  Text(
-                    _titleController.text.trim().isEmpty
-                        ? _conciseTitle
-                        : _titleController.text.trim(),
-                    style: const TextStyle(
-                      fontSize: 17.5,
-                      fontWeight: FontWeight.w900,
-                      height: 1.15,
-                      color: _ink,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Short description (secondary)
-                  Text(
-                    _taskController.text.trim().isEmpty
-                        ? "Your task details will appear here."
-                        : _taskController.text.trim(),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      height: 1.35,
-                      color: _muted,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _pill(
-                        icon: Icons.flash_on_rounded,
-                        text: _isNow ? "ASAP" : _scheduleLabel,
-                        bg: _isNow
-                            ? const Color(0xFFFFEFE4)
-                            : const Color(0xFFF1F2F5),
-                        fg: _ink,
-                        onTap: () async {
-                          if (_isNow) {
-                            setState(() => _isNow = true);
-                            _fetchEstimatedCost();
-                          } else {
-                            await _pickSchedule();
-                          }
-                        },
-                      ),
-                      _pill(
-                        icon: Icons.people_alt_rounded,
-                        text: "People: $_peopleCount",
-                      ),
-                      _pill(
-                        icon: Icons.timer_rounded,
-                        text: "Duration: ${_durationLabel()}",
-                      ),
-                      if (_hasPickup)
-                        _pill(
-                          icon: Icons.alt_route_rounded,
-                          text: "Pickup included",
-                        ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F2F5),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _line),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.lock_rounded, size: 16, color: _muted),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            "Payment is held securely until a ZanCrew accepts.",
-                            style: TextStyle(
-                              fontSize: 12.8,
-                              fontWeight: FontWeight.w700,
-                              color: _muted,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-            // ========================= DETAILS (EDITABLE / EXPANDABLE) =========================
-            GestureDetector(
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: _cardShell(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                  // ========================= APPROVAL SUMMARY (TOP) =========================
+                  _cardShell(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          "Task details",
+                          "Summary",
                           style: TextStyle(
                             fontSize: 15.5,
                             fontWeight: FontWeight.w900,
                             color: _ink,
                           ),
                         ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
+                        const SizedBox(height: 10),
+
+                        // Title (primary anchor)
+                        Text(
+                          _titleController.text.trim().isEmpty
+                              ? _conciseTitle
+                              : _titleController.text.trim(),
+                          style: const TextStyle(
+                            fontSize: 17.5,
+                            fontWeight: FontWeight.w900,
+                            height: 1.15,
+                            color: _ink,
                           ),
-                          decoration: BoxDecoration(
-                            color: _expanded
-                                ? const Color(0xFFF1F2F5)
-                                : const Color(0xFF101114),
-                            borderRadius: BorderRadius.circular(999),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Short description (secondary)
+                        Text(
+                          _taskController.text.trim().isEmpty
+                              ? "Your task details will appear here."
+                              : _taskController.text.trim(),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            height: 1.35,
+                            color: _muted,
+                            fontWeight: FontWeight.w600,
                           ),
-                          child: Text(
-                            _expanded ? "Hide" : "Edit",
-                            style: TextStyle(
-                              fontSize: 12.8,
-                              fontWeight: FontWeight.w900,
-                              color: _expanded ? _ink : Colors.white,
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            _pill(
+                              icon: Icons.flash_on_rounded,
+                              text: _isNow ? "ASAP" : _scheduleLabel,
+                              bg: _isNow ? const Color(0xFFFFF3E9) : _surface,
+                              fg: _ink,
+                              onTap: () async {
+                                if (_isNow) {
+                                  setState(() => _isNow = true);
+                                  _fetchEstimatedCost();
+                                } else {
+                                  await _pickSchedule();
+                                }
+                              },
                             ),
+                            _pill(
+                              icon: Icons.people_alt_rounded,
+                              text: "People: $_peopleCount",
+                            ),
+                            _pill(
+                              icon: Icons.timer_rounded,
+                              text: "Duration: ${_durationLabel()}",
+                            ),
+                            if (_hasPickup)
+                              _pill(
+                                icon: Icons.alt_route_rounded,
+                                text: "Pickup included",
+                              ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                          decoration: BoxDecoration(
+                            color: _surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: _line),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.lock_rounded,
+                                size: 16,
+                                color: _muted,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  "Payment is held securely until a ZanCrew accepts.",
+                                  style: TextStyle(
+                                    fontSize: 12.8,
+                                    fontWeight: FontWeight.w700,
+                                    color: _muted,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                  ),
 
-                    if (!_expanded) ...[
-                      if (_actions.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          "Expected actions",
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: _muted,
+                  const SizedBox(height: 16),
+                  // ========================= DETAILS (EDITABLE / EXPANDABLE) =========================
+                  GestureDetector(
+                    onTap: () => setState(() => _expanded = !_expanded),
+                    child: _cardShell(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text(
+                                "Task details",
+                                style: TextStyle(
+                                  fontSize: 15.5,
+                                  fontWeight: FontWeight.w900,
+                                  color: _ink,
+                                ),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _expanded ? _surface : _ink,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _expanded ? "Hide" : "Edit",
+                                      style: TextStyle(
+                                        fontSize: 12.8,
+                                        fontWeight: FontWeight.w900,
+                                        color: _expanded ? _ink : Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      _expanded
+                                          ? Icons.keyboard_arrow_up_rounded
+                                          : Icons.keyboard_arrow_down_rounded,
+                                      size: 16,
+                                      color: _expanded ? _ink : Colors.white,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        ..._actions.take(2).map((a) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  margin: const EdgeInsets.only(top: 3),
-                                  width: 18,
-                                  height: 18,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFEAF1FF),
-                                    borderRadius: BorderRadius.circular(6),
+                          const SizedBox(height: 10),
+
+                          if (!_expanded) ...[
+                            if (_actions.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                "Expected actions",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: _muted,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              ..._actions.take(2).map((a) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        margin: const EdgeInsets.only(top: 3),
+                                        width: 18,
+                                        height: 18,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFF3E9),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          Icons.check_rounded,
+                                          size: 14,
+                                          color: _accent,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          a,
+                                          style: const TextStyle(
+                                            fontSize: 13.8,
+                                            height: 1.35,
+                                            color: _ink,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  child: const Icon(
-                                    Icons.check_rounded,
-                                    size: 14,
-                                    color: Color(0xFF2F6BFF),
+                                );
+                              }),
+                              if (_actions.length > 2)
+                                Text(
+                                  "+ ${_actions.length - 2} more",
+                                  style: const TextStyle(
+                                    fontSize: 12.8,
+                                    color: _muted,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    a,
-                                    style: const TextStyle(
-                                      fontSize: 13.8,
-                                      height: 1.35,
-                                      color: _ink,
-                                      fontWeight: FontWeight.w700,
+                            ] else ...[
+                              Text(
+                                "Tap Edit to review full details.",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _muted,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ],
+
+                          if (_expanded) ...[
+                            const SizedBox(height: 12),
+                            _sectionTitle(
+                              "Job title",
+                              subtitle: "Keep it short and clear.",
+                            ),
+                            TextField(
+                              controller: _titleController,
+                              maxLines: 1,
+                              inputFormatters: [WordLimitFormatter(10)],
+                              decoration: InputDecoration(
+                                hintText:
+                                    "Example: Key handover & utility check",
+                                hintStyle: TextStyle(
+                                  color: _muted.withValues(alpha: 0.8),
+                                ),
+                                filled: true,
+                                fillColor: _surface,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: _line),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: _line),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: const BorderSide(
+                                    color: _ink,
+                                    width: 1.2,
+                                  ),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: _ink,
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+
+                            if (_actions.isNotEmpty) ...[
+                              _sectionTitle(
+                                "Expected actions",
+                                subtitle:
+                                    "This helps your partner do the job correctly.",
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: _actions.map((a) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          margin: const EdgeInsets.only(top: 2),
+                                          width: 18,
+                                          height: 18,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFFF3E9),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            Icons.check_rounded,
+                                            size: 14,
+                                            color: _accent,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            a,
+                                            style: const TextStyle(
+                                              fontSize: 13.8,
+                                              height: 1.35,
+                                              color: _ink,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+
+                            _sectionTitle(
+                              "Your requirements",
+                              subtitle:
+                                  "You can tweak anything — ZanCrew will follow this.",
+                            ),
+                            TextField(
+                              controller: _taskController,
+                              maxLines: null,
+                              textAlign: TextAlign.start,
+                              decoration: InputDecoration(
+                                hintText: "Describe exactly what you need…",
+                                hintStyle: TextStyle(
+                                  color: _muted.withValues(alpha: 0.8),
+                                ),
+                                filled: true,
+                                fillColor: _surface,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: _line),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: _line),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: const BorderSide(
+                                    color: _ink,
+                                    width: 1.2,
+                                  ),
+                                ),
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  14,
+                                  14,
+                                  14,
+                                ),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 14.2,
+                                height: 1.45,
+                                letterSpacing: 0.1,
+                                color: _ink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              cursorColor: _ink,
+                            ),
+                            const SizedBox(height: 16),
+
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _sectionTitle(
+                                    "Important notes",
+                                    subtitle:
+                                        "Gate code, flat number, landmark…",
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: _suggestNotesFromText,
+                                  icon: const Icon(
+                                    Icons.auto_awesome_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text("Auto"),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: _ink,
                                   ),
                                 ),
                               ],
                             ),
-                          );
-                        }).toList(),
-                        if (_actions.length > 2)
-                          Text(
-                            "+ ${_actions.length - 2} more",
-                            style: const TextStyle(
-                              fontSize: 12.8,
-                              color: _muted,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                      ] else ...[
-                        Text(
-                          "Tap Edit to review full details.",
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: _muted,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ],
 
-                    if (_expanded) ...[
-                      const SizedBox(height: 12),
-                      _sectionTitle(
-                        "Job title",
-                        subtitle: "Keep it short and clear.",
-                      ),
-                      TextField(
-                        controller: _titleController,
-                        maxLines: 1,
-                        inputFormatters: [WordLimitFormatter(10)],
-                        decoration: InputDecoration(
-                          hintText: "Example: Key handover & utility check",
-                          hintStyle: TextStyle(color: _muted.withOpacity(0.8)),
-                          filled: true,
-                          fillColor: const Color(0xFFF1F2F5),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: _line),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: _line),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(
-                              color: _ink,
-                              width: 1.2,
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                        ),
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: _ink,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                ..._importantNotes.map((note) {
+                                  return InputChip(
+                                    label: Text(note),
+                                    labelStyle: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: _ink,
+                                    ),
+                                    backgroundColor: const Color(0xFFFFF3E9),
+                                    deleteIconColor: _muted,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(999),
+                                      side: BorderSide(color: _line),
+                                    ),
+                                    onDeleted: () => setState(
+                                      () => _importantNotes.remove(note),
+                                    ),
+                                  );
+                                }).toList(),
 
-                      if (_actions.isNotEmpty) ...[
-                        _sectionTitle(
-                          "Expected actions",
-                          subtitle:
-                              "This helps your partner do the job correctly.",
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _actions.map((a) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 2),
-                                    width: 18,
-                                    height: 18,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFEAF1FF),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Icon(
-                                      Icons.check_rounded,
-                                      size: 14,
-                                      color: Color(0xFF2F6BFF),
-                                    ),
+                                ActionChip(
+                                  label: const Text("+ Add"),
+                                  labelStyle: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    color: _ink,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      a,
-                                      style: const TextStyle(
-                                        fontSize: 13.8,
-                                        height: 1.35,
-                                        color: _ink,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
+                                  backgroundColor: _surface,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(999),
+                                    side: BorderSide(color: _line),
                                   ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      _sectionTitle(
-                        "Your requirements",
-                        subtitle:
-                            "You can tweak anything — ZanCrew will follow this.",
-                      ),
-                      TextField(
-                        controller: _taskController,
-                        maxLines: null,
-                        textAlign: TextAlign.start,
-                        decoration: InputDecoration(
-                          hintText: "Describe exactly what you need…",
-                          hintStyle: TextStyle(color: _muted.withOpacity(0.8)),
-                          filled: true,
-                          fillColor: const Color(0xFFF1F2F5),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: _line),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: _line),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(
-                              color: _ink,
-                              width: 1.2,
+                                  onPressed: () async {
+                                    _chipEditController.clear();
+                                    final newNote = await _addNoteDialog();
+                                    if (newNote != null &&
+                                        newNote.trim().isNotEmpty) {
+                                      setState(
+                                        () =>
+                                            _importantNotes.add(newNote.trim()),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
-                          ),
-                          contentPadding: const EdgeInsets.fromLTRB(
-                            14,
-                            14,
-                            14,
-                            14,
-                          ),
-                        ),
-                        style: const TextStyle(
-                          fontSize: 14.2,
-                          height: 1.45,
-                          letterSpacing: 0.1,
-                          color: _ink,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        cursorColor: _ink,
-                      ),
-                      const SizedBox(height: 16),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _sectionTitle(
-                              "Important notes",
-                              subtitle: "Gate code, flat number, landmark…",
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: _suggestNotesFromText,
-                            icon: const Icon(
-                              Icons.auto_awesome_rounded,
-                              size: 18,
-                            ),
-                            label: const Text("Auto"),
-                            style: TextButton.styleFrom(foregroundColor: _ink),
-                          ),
+                          ],
                         ],
                       ),
+                    ),
+                  ),
 
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          ..._importantNotes.map((note) {
-                            return InputChip(
-                              label: Text(note),
-                              labelStyle: const TextStyle(
+                  const SizedBox(height: 16),
+
+                  // ========================= LOCATION =========================
+                  _cardShell(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _sectionTitle(
+                          "Location",
+                          subtitle:
+                              "Where should the ZanCrew partner arrive or return items?",
+                        ),
+                        const SizedBox(height: 10),
+
+                        Theme(
+                          data: Theme.of(context).copyWith(
+                            inputDecorationTheme: Theme.of(context)
+                                .inputDecorationTheme
+                                .copyWith(
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(color: _line),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                      color: _ink,
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                ),
+                          ),
+                          child: LocationSelector(
+                            controller: _locationController,
+                            icon: Icons.location_on_rounded,
+                            iconColor: const Color(0xFF22C55E),
+                            onSelected: (address, lat, lng) async {
+                              _locationController.text = address;
+                              _selectedLat = lat;
+                              _selectedLng = lng;
+
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+                              await prefs.setString('review_address', address);
+                              await prefs.setDouble('review_lat', lat);
+                              await prefs.setDouble('review_lng', lng);
+                              await prefs.setString(
+                                'review_place_id',
+                                "manual",
+                              );
+
+                              if (mounted) setState(() {});
+                            },
+                          ),
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        Container(
+                          decoration: BoxDecoration(
+                            color: _surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: _line),
+                          ),
+                          child: SwitchListTile(
+                            value: _hasPickup,
+                            onChanged: (v) => setState(() => _hasPickup = v),
+                            title: const Text(
+                              "Pickup from another location",
+                              style: TextStyle(
+                                fontSize: 14.5,
                                 fontWeight: FontWeight.w800,
                                 color: _ink,
                               ),
-                              backgroundColor: const Color(0xFFFFF3E9),
-                              deleteIconColor: _muted,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(999),
-                                side: BorderSide(color: _line),
+                            ),
+                            subtitle: Text(
+                              "Enable if something must be collected first",
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: _muted,
                               ),
-                              onDeleted: () =>
-                                  setState(() => _importantNotes.remove(note)),
-                            );
-                          }).toList(),
+                            ),
+                            activeThumbColor: _ink,
+                          ),
+                        ),
 
-                          ActionChip(
-                            label: const Text("+ Add"),
-                            labelStyle: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: _ink,
+                        if (_hasPickup &&
+                            _pickupController.text.trim().isEmpty) ...[
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Text(
+                              "Auto-detected: this task may need a pickup location.",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _muted,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                            backgroundColor: const Color(0xFFF1F2F5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999),
-                              side: BorderSide(color: _line),
-                            ),
-                            onPressed: () async {
-                              _chipEditController.clear();
-                              final newNote = await _addNoteDialog();
-                              if (newNote != null &&
-                                  newNote.trim().isNotEmpty) {
-                                setState(
-                                  () => _importantNotes.add(newNote.trim()),
-                                );
-                              }
-                            },
                           ),
                         ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
 
-            const SizedBox(height: 16),
+                        if (_hasPickup) ...[
+                          const SizedBox(height: 14),
+                          _sectionTitle(
+                            "Pickup address",
+                            subtitle: "Where should the partner collect from?",
+                          ),
+                          const SizedBox(height: 10),
+                          Theme(
+                            data: Theme.of(context).copyWith(
+                              inputDecorationTheme: Theme.of(context)
+                                  .inputDecorationTheme
+                                  .copyWith(
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(color: _line),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(
+                                        color: _ink,
+                                        width: 1.2,
+                                      ),
+                                    ),
+                                  ),
+                            ),
+                            child: LocationSelector(
+                              controller: _pickupController,
+                              icon: Icons.location_on_rounded,
+                              iconColor: _accent,
+                              onSelected: (address, lat, lng) async {
+                                _pickupController.text = address;
+                                _pickupLat = lat;
+                                _pickupLng = lng;
 
-            // ========================= LOCATION =========================
-            _cardShell(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _sectionTitle(
-                    "Location",
-                    subtitle:
-                        "Where should the ZanCrew partner arrive or return items?",
-                  ),
-                  const SizedBox(height: 10),
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                await prefs.setString(
+                                  'pickup_address',
+                                  address,
+                                );
+                                await prefs.setDouble('pickup_lat', lat);
+                                await prefs.setDouble('pickup_lng', lng);
 
-                  LocationSelector(
-                    controller: _locationController,
-                    icon: Icons.location_on_rounded,
-                    iconColor: const Color(0xFF22C55E),
-                    onSelected: (address, lat, lng) async {
-                      _locationController.text = address;
-                      _selectedLat = lat;
-                      _selectedLng = lng;
-
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setString('review_address', address);
-                      await prefs.setDouble('review_lat', lat);
-                      await prefs.setDouble('review_lng', lng);
-                      await prefs.setString('review_place_id', "manual");
-
-                      if (mounted) setState(() {});
-                    },
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F2F5),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _line),
-                    ),
-                    child: SwitchListTile(
-                      value: _hasPickup,
-                      onChanged: (v) => setState(() => _hasPickup = v),
-                      title: const Text(
-                        "Pickup from another location",
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
-                          color: _ink,
-                        ),
-                      ),
-                      subtitle: Text(
-                        "Enable if something must be collected first",
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: _muted,
-                        ),
-                      ),
-                      activeColor: _ink,
-                    ),
-                  ),
-
-                  if (_hasPickup) ...[
-                    const SizedBox(height: 14),
-                    _sectionTitle(
-                      "Pickup address",
-                      subtitle: "Where should the partner collect from?",
-                    ),
-                    const SizedBox(height: 10),
-                    LocationSelector(
-                      controller: _pickupController,
-                      icon: Icons.location_on_rounded,
-                      iconColor: _accent,
-                      onSelected: (address, lat, lng) async {
-                        _pickupController.text = address;
-                        _pickupLat = lat;
-                        _pickupLng = lng;
-
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setString('pickup_address', address);
-                        await prefs.setDouble('pickup_lat', lat);
-                        await prefs.setDouble('pickup_lng', lng);
-
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ========================= WHEN =========================
-            _cardShell(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _sectionTitle(
-                    "When",
-                    subtitle: "Choose ASAP or schedule a time.",
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _isNow
-                                ? _ink
-                                : const Color(0xFFF1F2F5),
-                            foregroundColor: _isNow ? Colors.white : _ink,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                                if (mounted) setState(() {});
+                              },
                             ),
                           ),
-                          onPressed: () {
-                            setState(() => _isNow = true);
-                            _fetchEstimatedCost();
-                          },
-                          icon: const Icon(Icons.flash_on_rounded),
-                          label: const Text(
-                            "ASAP",
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // ========================= WHEN & SETUP (MERGED) =========================
+                  _cardShell(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _sectionTitle(
+                          "When & setup",
+                          subtitle: "Timing, team size, and duration.",
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: !_isNow
-                                ? _ink
-                                : const Color(0xFFF1F2F5),
-                            foregroundColor: !_isNow ? Colors.white : _ink,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                        const SizedBox(height: 12),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _isNow ? _ink : _surface,
+                                  foregroundColor: _isNow ? Colors.white : _ink,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  setState(() => _isNow = true);
+                                  _fetchEstimatedCost();
+                                },
+                                icon: const Icon(Icons.flash_on_rounded),
+                                label: const Text(
+                                  "ASAP",
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
                             ),
-                          ),
-                          onPressed: _pickSchedule,
-                          icon: const Icon(Icons.calendar_month_rounded),
-                          label: Text(
-                            _scheduleLabel,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: !_isNow ? _ink : _surface,
+                                  foregroundColor: !_isNow
+                                      ? Colors.white
+                                      : _ink,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: _pickSchedule,
+                                icon: const Icon(Icons.calendar_month_rounded),
+                                label: Text(
+                                  _scheduleLabel,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
 
-            const SizedBox(height: 16),
+                        const SizedBox(height: 16),
+                        const Divider(color: _line),
+                        const SizedBox(height: 14),
 
-            // ========================= PEOPLE + DURATION =========================
-            _cardShell(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _sectionTitle(
-                    "Job setup",
-                    subtitle: "Adjust only if needed.",
-                  ),
-                  const SizedBox(height: 14),
+                        _stepperRow(
+                          icon: Icons.people_alt_rounded,
+                          label: "People",
+                          value: "$_peopleCount",
+                          onMinus: _peopleCount > 1
+                              ? () {
+                                  setState(() => _peopleCount--);
+                                  _fetchEstimatedCost();
+                                }
+                              : null,
+                          onPlus: _peopleCount < 4
+                              ? () {
+                                  setState(() => _peopleCount++);
+                                  _fetchEstimatedCost();
+                                }
+                              : null,
+                        ),
 
-                  _stepperRow(
-                    icon: Icons.people_alt_rounded,
-                    label: "People",
-                    value: "$_peopleCount",
-                    onMinus: _peopleCount > 1
-                        ? () {
-                            setState(() => _peopleCount--);
-                            _fetchEstimatedCost();
-                          }
-                        : null,
-                    onPlus: _peopleCount < 4
-                        ? () {
-                            setState(() => _peopleCount++);
-                            _fetchEstimatedCost();
-                          }
-                        : null,
-                  ),
+                        const SizedBox(height: 14),
+                        const Divider(color: _line),
+                        const SizedBox(height: 14),
 
-                  const SizedBox(height: 14),
-                  Divider(color: _line),
-                  const SizedBox(height: 14),
-
-                  _stepperRow(
-                    icon: Icons.timer_rounded,
-                    label: "Duration",
-                    value: _durationLabel(),
-                    onMinus: _durationHours > 0.5
-                        ? () {
+                        _stepperRow(
+                          icon: Icons.timer_rounded,
+                          label: "Duration",
+                          value: _durationLabel(),
+                          onMinus: _durationHours > 0.5
+                              ? () {
+                                  setState(() {
+                                    _durationHours = (_durationHours - 0.5)
+                                        .clamp(0.5, 8.0);
+                                  });
+                                  _fetchEstimatedCost();
+                                }
+                              : null,
+                          onPlus: () {
                             setState(() {
-                              _durationHours = (_durationHours - 0.5).clamp(
+                              _durationHours = (_durationHours + 0.5).clamp(
                                 0.5,
                                 8.0,
                               );
                             });
                             _fetchEstimatedCost();
-                          }
-                        : null,
-                    onPlus: () {
-                      setState(() {
-                        _durationHours = (_durationHours + 0.5).clamp(0.5, 8.0);
-                      });
-                      _fetchEstimatedCost();
-                    },
+                          },
+                        ),
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30),
+                          child: Text(
+                            "Minimum job time is 30 minutes.",
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: _muted,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
-
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
     );
   }
 }
