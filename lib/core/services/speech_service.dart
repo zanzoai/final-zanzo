@@ -29,6 +29,7 @@ class SpeechService with ChangeNotifier {
   bool _endedByStop = false;      // guard: prevents _onResult double-committing
   String _accumulatedText = '';   // confirmed words from previous auto-restarts
   DateTime? _dictationStart;      // when the user first tapped mic
+  DateTime? _sessionStart;        // when the current native session started
   Timer? _restartTimer;           // pending auto-restart timer
   String? _lastLoggedError;       // dedup guard for repeated error logs
 
@@ -142,6 +143,7 @@ class SpeechService with ChangeNotifier {
     final remaining = _totalMaxSecs - elapsed;
     final sessionSecs = remaining < _sessionSecs ? remaining : _sessionSecs;
 
+    _sessionStart = DateTime.now();
     _currentPartial = '';
     _isRecording = true;
     notifyListeners();
@@ -188,12 +190,22 @@ class SpeechService with ChangeNotifier {
             : DateTime.now().difference(_dictationStart!).inSeconds;
 
         if (elapsed < _totalMaxSecs) {
-          // Auto-restart: accumulate this session's result and schedule next.
-          if (words.isNotEmpty) {
-            _accumulatedText = _accumulatedText.isEmpty
-                ? words
-                : '$_accumulatedText $words';
+          // Empty words means the native engine ended due to pauseFor (silence).
+          // No speech was detected in this session — stop the whole dictation
+          // and commit whatever was accumulated so far. The user can tap the
+          // mic again to continue. Do NOT auto-restart on silence.
+          if (words.isEmpty) {
+            _restartTimer?.cancel();
+            _restartTimer = null;
+            _endedByStop = true;
+            _endLongDictation(); // commits _accumulatedText as _finalText
+            return;
           }
+
+          // Auto-restart: accumulate this session's result and schedule next.
+          _accumulatedText = _accumulatedText.isEmpty
+              ? words
+              : '$_accumulatedText $words';
           _currentPartial = '';
           // _finalText intentionally NOT set — HomeScreen must not commit yet.
           // Cancel any restart already queued by _onStatus; we take over here.
@@ -254,8 +266,37 @@ class SpeechService with ChangeNotifier {
     _isRecording = false;
     _currentPartial = '';
 
-    // On transient errors during long dictation, retry after a longer delay.
     if (_isLongDictation && !_userStopped && !_endedByStop) {
+      // error_no_match fires on two distinct platforms paths:
+      //   A) Android — genuine silence: pauseFor (15 s) elapsed with no speech
+      //      → session elapsed ≈ _pauseSecs → stop, don't restart.
+      //   B) Android — transient recognition failure: engine starts but can't
+      //      process the audio in the first few seconds (background noise, codec
+      //      initialisation, etc.) → session elapsed is short → retry once.
+      // iOS uses _onResult(final, words='') for silence, so this branch is
+      // effectively Android-only; the timing check makes it safe for both.
+      if (error.errorMsg == 'error_no_match') {
+        final sessionElapsed = _sessionStart == null
+            ? _pauseSecs
+            : DateTime.now().difference(_sessionStart!).inSeconds;
+        if (sessionElapsed >= _pauseSecs ~/ 2) {
+          // Long session: genuine silence timeout — end dictation.
+          _restartTimer?.cancel();
+          _restartTimer = null;
+          _endedByStop = true;
+          _endLongDictation();
+          return;
+        }
+        // Short session: transient engine startup failure — retry.
+        notifyListeners();
+        _restartTimer = Timer(
+          const Duration(milliseconds: _restartDelayMs * 2),
+          () async { await _startInternalSession(); },
+        );
+        return;
+      }
+
+      // On other transient errors, retry after a longer delay.
       final elapsed = _dictationStart == null
           ? _totalMaxSecs
           : DateTime.now().difference(_dictationStart!).inSeconds;
