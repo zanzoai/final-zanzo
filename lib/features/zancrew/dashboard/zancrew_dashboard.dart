@@ -85,13 +85,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   StreamSubscription<RemoteMessage>? _fcmOpenedSub;
 
   // ---------------------------------------------------------------------------
-  // PREMIUM UI constants
+  // Warm Zanzo palette
   // ---------------------------------------------------------------------------
-  static const Color _bg = Color(0xFFF6F7F9);
+  static const Color _accent = Color(0xFFD97706);
+  static const Color _bg = Color(0xFFFCFAF6);
+  static const Color _surface = Color(0xFFF5F2EE);
   static const Color _card = Colors.white;
-  static const Color _ink = Color(0xFF111827);
-  static const Color _muted = Color(0xFF6B7280);
-  static const Color _border = Color(0xFFE5E7EB);
+  static const Color _ink = Color(0xFF26211C);
+  static const Color _muted = Color(0xFF9B8B7E);
+  static const Color _border = Color(0xFFE8E2D9);
+  static const Color _success = Color(0xFF16A34A);
 
   @override
   void initState() {
@@ -431,13 +434,26 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         await ZanCrewApi.setOnline(userId: uid, online: v);
       }
     } catch (e) {
-      // Revert local state so UI matches backend
       await prefs.setBool('zancrew_online', !v);
       if (mounted) {
         setState(() => _online = !v);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-        );
+        final msg = e.toString().toLowerCase();
+        if (msg.contains('403') ||
+            msg.contains('bank') ||
+            msg.contains('kyc') ||
+            msg.contains('verified')) {
+          _showBankMissingSheet(
+            title: 'Add bank details to go online',
+            body:
+                'We need your bank details before you can receive and accept paid jobs.',
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unable to go online. Please try again.'),
+            ),
+          );
+        }
       }
     }
   }
@@ -604,9 +620,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       _recalculateTodayEarningsFromOffers(effStatus);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to load offers: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to load offers. Please try again.'),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _offersLoading = false);
     }
@@ -735,7 +753,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: _bg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -787,6 +805,8 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                         return FilterChip(
                           label: Text(b),
                           selected: selected,
+                          selectedColor: _accent.withValues(alpha: 0.15),
+                          checkmarkColor: _accent,
                           onSelected: (v) {
                             setLocal(() {
                               if (v) {
@@ -812,6 +832,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                             min: 1,
                             max: 50,
                             divisions: 49,
+                            activeColor: _accent,
                             label: '${tempRadius.toStringAsFixed(0)} km',
                             onChanged: (v) => setLocal(() => tempRadius = v),
                           ),
@@ -839,7 +860,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                               ? null
                               : () => Navigator.pop(ctx, true),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
+                            backgroundColor: _accent,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -900,6 +921,99 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   // PREMIUM UI HELPERS
   // ---------------------------------------------------------------------------
+  void _showBankMissingSheet({required String title, required String body}) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: _border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  color: _ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                body,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: _muted,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const UkBankDetailsScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Add bank details',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    'Not now',
+                    style: TextStyle(
+                      color: _muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _softCard({required Widget child, EdgeInsets? padding}) {
     return Container(
       decoration: BoxDecoration(
@@ -923,7 +1037,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: _surface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: _border),
       ),
@@ -963,9 +1077,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       child: Scaffold(
         backgroundColor: _bg,
         appBar: AppBar(
-          backgroundColor: Colors.white,
+          backgroundColor: _bg,
           foregroundColor: _ink,
           elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
           title: const Text(
             'ZanCrew Dashboard',
             style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
@@ -983,9 +1099,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
               icon: const Icon(Icons.account_balance_outlined),
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const UkBankDetailsScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const UkBankDetailsScreen()),
               ),
             ),
             IconButton(
@@ -1010,12 +1124,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
             },
             labelColor: _ink,
             unselectedLabelColor: _muted,
-            indicatorColor: _ink,
+            indicatorColor: _accent,
             indicatorWeight: 3,
             labelStyle: const TextStyle(fontWeight: FontWeight.w900),
             tabs: const [
-              Tab(text: 'Inbox'),
-              Tab(text: 'My Jobs'),
+              Tab(text: 'Offers'),
+              Tab(text: 'Active'),
             ],
           ),
         ),
@@ -1057,7 +1171,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
+                  backgroundColor: _accent,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
@@ -1108,7 +1222,8 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
               ),
               Switch(
                 value: _online,
-                activeColor: Colors.green,
+                activeThumbColor: _success,
+                activeTrackColor: _success.withValues(alpha: 0.35),
                 onChanged: _toggleOnline,
               ),
             ],
@@ -1119,12 +1234,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
         Expanded(
           child: !_online
-              ? Center(
+              ? const Center(
                   child: Text(
                     'Turn online to receive nearby jobs.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: _muted.withOpacity(0.95),
+                      color: _muted,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1311,8 +1426,9 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
+                            color: _surface,
                             borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: _border),
                           ),
                           child: Text(
                             bucket,
@@ -1410,22 +1526,8 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                       ],
                       if (when.isNotEmpty && dist.isNotEmpty)
                         const SizedBox(width: 12),
-                      if (dist.isNotEmpty) ...[
-                        const Icon(
-                          Icons.place_outlined,
-                          size: 16,
-                          color: _muted,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '$dist away',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: _muted,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
+                      if (dist.isNotEmpty)
+                        _pill(icon: Icons.place_outlined, text: '$dist away'),
                     ],
                   ),
                 ],

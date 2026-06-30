@@ -58,12 +58,15 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
     'completed',
   ];
 
-  // Premium UI constants (no dependency, no theme hacking)
-  static const _bg = Color(0xFFF6F7F9);
-  static const _card = Colors.white;
-  static const _ink = Color(0xFF111827);
-  static const _muted = Color(0xFF6B7280);
-  static const _border = Color(0xFFE5E7EB);
+  // Warm Zanzo palette
+  static const Color _accent = Color(0xFFD97706);
+  static const Color _bg = Color(0xFFFCFAF6);
+  static const Color _surface = Color(0xFFF5F2EE);
+  static const Color _card = Colors.white;
+  static const Color _ink = Color(0xFF26211C);
+  static const Color _muted = Color(0xFF9B8B7E);
+  static const Color _border = Color(0xFFE8E2D9);
+  static const Color _success = Color(0xFF16A34A);
 
   @override
   void initState() {
@@ -372,23 +375,23 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Ask the customer for the 6-digit Start PIN.',
+                      'Ask the customer for their 4-digit Start PIN.',
                       style: TextStyle(color: _muted),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: controller,
                       decoration: InputDecoration(
-                        hintText: '6-digit PIN',
+                        hintText: 'Enter 4-digit PIN',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        fillColor: const Color(0xFFF9FAFB),
+                        fillColor: _surface,
                         filled: true,
                         errorText: errorText,
                       ),
                       keyboardType: TextInputType.number,
-                      maxLength: 6,
+                      maxLength: 4,
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -400,7 +403,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
+                      backgroundColor: _accent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -461,23 +464,23 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Ask the customer for the 6-digit End PIN to complete the job.',
+                      'Ask the customer for their 4-digit End PIN.',
                       style: TextStyle(color: _muted),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: controller,
                       decoration: InputDecoration(
-                        hintText: '6-digit PIN',
+                        hintText: 'Enter 4-digit PIN',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        fillColor: const Color(0xFFF9FAFB),
+                        fillColor: _surface,
                         filled: true,
                         errorText: errorText,
                       ),
                       keyboardType: TextInputType.number,
-                      maxLength: 6,
+                      maxLength: 4,
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -489,7 +492,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
+                      backgroundColor: _accent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -577,9 +580,9 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       case 'arrived':
         return const Color(0xFF10B981); // green
       case 'in_progress':
-        return const Color(0xFF111827); // ink
+        return _ink;
       case 'completed':
-        return const Color(0xFF16A34A); // strong green
+        return _success;
       default:
         return const Color(0xFF6B7280);
     }
@@ -626,7 +629,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: accent.withOpacity(0.10),
+                  color: accent.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Row(
@@ -680,10 +683,10 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
           const SizedBox(height: 10),
 
           // Micro line: “You are in control”
-          Text(
+          const Text(
             'Keep the job updated as you move.',
             style: TextStyle(
-              color: _muted.withOpacity(0.95),
+              color: _muted,
               fontWeight: FontWeight.w600,
               fontSize: 13,
             ),
@@ -732,7 +735,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF9FAFB),
+                  color: _surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: _border),
                 ),
@@ -848,15 +851,11 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                     width: 18,
                     height: 18,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
+                      color: const Color(0xFFFEF3C7),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFFDBEAFE)),
+                      border: Border.all(color: _border),
                     ),
-                    child: const Icon(
-                      Icons.check,
-                      size: 14,
-                      color: Color(0xFF2563EB),
-                    ),
+                    child: const Icon(Icons.check, size: 14, color: _accent),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -874,10 +873,10 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
               ),
             );
           }).toList(),
-          Text(
+          const Text(
             'Tip: Keep these steps in mind while working.',
             style: TextStyle(
-              color: _muted.withOpacity(0.95),
+              color: _muted,
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
             ),
@@ -932,7 +931,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFFF3F4F6),
+            color: _surface,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: _border),
           ),
@@ -978,9 +977,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: _sessionActive
-                      ? const Color(0xFFECFDF5)
-                      : const Color(0xFFF3F4F6),
+                  color: _sessionActive ? const Color(0xFFECFDF5) : _surface,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: _border),
                 ),
@@ -989,7 +986,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
-                    color: _sessionActive ? const Color(0xFF16A34A) : _muted,
+                    color: _sessionActive ? _success : _muted,
                   ),
                 ),
               ),
@@ -1001,7 +998,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             child: LinearProgressIndicator(
               value: (_minutesWorked / durationMinutes).clamp(0.0, 1.0),
               minHeight: 9,
-              backgroundColor: const Color(0xFFE5E7EB),
+              backgroundColor: _border,
               valueColor: const AlwaysStoppedAnimation<Color>(
                 Color(0xFF22C55E),
               ),
@@ -1049,9 +1046,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: active
-                      ? accent.withOpacity(0.10)
-                      : const Color(0xFFF3F4F6),
+                  color: active ? accent.withValues(alpha: 0.10) : _surface,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: _border),
                 ),
@@ -1088,7 +1083,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
+              backgroundColor: _accent,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -1150,7 +1145,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             'This job is completed ✅',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Color(0xFF16A34A),
+              color: _success,
               fontWeight: FontWeight.w800,
               fontSize: 14.5,
             ),
@@ -1177,7 +1172,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
               height: 52,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
+                  backgroundColor: _accent,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
@@ -1239,7 +1234,17 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
     if (_loading) {
       return Scaffold(
         backgroundColor: _bg,
-        appBar: AppBar(title: const Text('Job')),
+        appBar: AppBar(
+          backgroundColor: _bg,
+          foregroundColor: _ink,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          title: const Text(
+            'Active Job',
+            style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
+          ),
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -1247,7 +1252,17 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
     if (_job == null) {
       return Scaffold(
         backgroundColor: _bg,
-        appBar: AppBar(title: const Text('Job')),
+        appBar: AppBar(
+          backgroundColor: _bg,
+          foregroundColor: _ink,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          title: const Text(
+            'Active Job',
+            style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
+          ),
+        ),
         body: const Center(child: Text('Job not found')),
       );
     }
@@ -1290,7 +1305,15 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        title: const Text('Job', style: TextStyle(fontWeight: FontWeight.w800)),
+        backgroundColor: _bg,
+        foregroundColor: _ink,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: const Text(
+          'Active Job',
+          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
+        ),
         actions: [
           if (canChat)
             IconButton(
