@@ -87,6 +87,10 @@ class _HomeScreenState extends State<HomeScreen>
   String? _activeJobTitle;
   String? _activeJobStatus;
 
+  // Fires once per fresh app process — resets on cold restart automatically
+  // because it is a static field in memory (not persisted to disk).
+  static bool _didAutoOpenActiveJobThisSession = false;
+
   // ---------------------------------------------------------------------------
   // ANIMATIONS (glow shadow around input box)
   // ---------------------------------------------------------------------------
@@ -319,18 +323,39 @@ class _HomeScreenState extends State<HomeScreen>
     final userId = prefs.getString('user_id') ?? '';
     if (userId.isEmpty) return;
     try {
-      final res = await ApiService.getJson(
-        '/zancrew/active_task',
-      );
+      final res = await ApiService.getJson('/zancrew/active_task');
       if (!mounted) return;
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is Map && data['active'] == true) {
+          final jobId = (data['task_id'] ?? data['job_id'])?.toString();
+          final jobTitle = data['task_title']?.toString();
+          final jobStatus = data['status']?.toString();
+
           setState(() {
-            _activeJobId = (data['task_id'] ?? data['job_id'])?.toString();
-            _activeJobTitle = data['task_title']?.toString();
-            _activeJobStatus = data['status']?.toString();
+            _activeJobId = jobId;
+            _activeJobTitle = jobTitle;
+            _activeJobStatus = jobStatus;
           });
+
+          // Auto-open CrewJobDetail once per fresh app session so the worker
+          // lands directly on their in-progress job without any extra taps.
+          // The static guard means pressing back returns to Home normally and
+          // the screen will never auto-open again until the app is restarted.
+          if (!_didAutoOpenActiveJobThisSession &&
+              jobId != null &&
+              jobStatus != 'completed' &&
+              jobStatus != 'cancelled') {
+            _didAutoOpenActiveJobThisSession = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (!mounted) return;
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => CrewJobDetail(jobId: jobId)),
+              );
+              if (mounted) _checkActiveJob();
+            });
+          }
           return;
         }
       }
@@ -676,462 +701,487 @@ class _HomeScreenState extends State<HomeScreen>
         behavior: HitTestBehavior.opaque,
         onTap: () => FocusScope.of(context).unfocus(),
         child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22.0),
-          child: Stack(
-            children: [
-              // Main column fills SafeArea height.
-              // Expanded in the middle section vertically centres the input
-              // card between the hero text and the bottom card on any device.
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  SizedBox(height: topPad),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22.0),
+            child: Stack(
+              children: [
+                // Main column fills SafeArea height.
+                // Expanded in the middle section vertically centres the input
+                // card between the hero text and the bottom card on any device.
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(height: topPad),
 
-                  // ── Compact wordmark with saffron underline ────────────
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Zanzo',
-                        style: TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.w500,
-                          color: _kInk,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Container(
-                        width: 28,
-                        height: 2.5,
-                        decoration: BoxDecoration(
-                          color: _kSaffron,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  SizedBox(height: heroGap),
-
-                  // ── Hero ──────────────────────────────────────────────
-                  Text(
-                    'Hire a human\nnear you',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: heroFontSize,
-                      fontWeight: FontWeight.w500,
-                      color: _kInk,
-                      height: 1.05,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "Tell Zanzo what you need — we'll turn it into action.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: subtitleFontSize,
-                      color: _kMuted,
-                      fontWeight: FontWeight.w400,
-                      height: 1.4,
-                    ),
-                  ),
-
-                  // ── Input card + trust strip — vertically centred ─────
-                  // Expanded absorbs the space between the hero text and the
-                  // bottom "Happening near you" section so the input sits at
-                  // the true visual midpoint on every screen size.
-                  // The bottom padding biases the column slightly above centre,
-                  // which reads more naturally when the hero text sits close
-                  // above and the bottom card is anchored below.
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(bottom: keyboardOpen ? 0 : 60),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-
-                        // ── Elevated prompt card ──────────────────────────
-                        AnimatedBuilder(
-                          animation: _glowAnim,
-                          builder: (context, _) {
-                            return Container(
-                              decoration: BoxDecoration(
-                                // Subtle warm gradient — top bright white,
-                                // base drifts toward the off-white ground colour.
-                                // Gives a softly lifted, premium surface feel
-                                // without blur or heavy effects.
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Color(0xFFFFFFFF),  // bright white top
-                                    Color(0xFFFEFBF6),  // warm tinted base
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(26),
-                                border: Border.all(
-                                  color: _kInk.withValues(alpha: 0.08),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(
-                                      alpha: 0.08 + (_glowAnim.value * 0.04),
-                                    ),
-                                    blurRadius: 36 + (10 * _glowAnim.value),
-                                    spreadRadius: 0,
-                                    offset: Offset(0, 12 + (3 * _glowAnim.value)),
-                                  ),
-                                  // Warm ambient glow — premium feel without blur
-                                  BoxShadow(
-                                    color: _kSaffron.withValues(
-                                      alpha: 0.04 + (_glowAnim.value * 0.03),
-                                    ),
-                                    blurRadius: 48,
-                                    spreadRadius: 0,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 14,
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Expanded(
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        minHeight: 100,
-                                        maxHeight: 200,
-                                      ),
-                                      child: TextField(
-                                        controller: _controller,
-                                        onChanged: (_) => setState(() {}),
-                                        onSubmitted: (_) =>
-                                            canSend ? _sendRequest() : null,
-                                        minLines: 4,
-                                        maxLines: 8,
-                                        keyboardType: TextInputType.multiline,
-                                        textInputAction: TextInputAction.newline,
-                                        style: const TextStyle(
-                                          color: _kInk,
-                                          fontSize: 15,
-                                          height: 1.4,
-                                        ),
-                                        decoration: const InputDecoration(
-                                          hintText: 'Type or speak your request…',
-                                          hintStyle: TextStyle(
-                                            color: _kMuted,
-                                            fontSize: 15,
-                                          ),
-                                          border: InputBorder.none,
-                                          contentPadding: EdgeInsets.zero,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  // Mic — voice input, left of send
-                                  _MicButton(
-                                    isRecording: _voice.isRecording,
-                                    isLongDictating: _voice.isLongDictating,
-                                    onPressed: _toggleVoice,
-                                  ),
-                                  const SizedBox(width: 4),
-
-                                  // Send — saffron circle, rightmost final action
-                                  GestureDetector(
-                                    onTap: canSend ? _sendRequest : null,
-                                    child: Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: canSend
-                                            ? _kSaffron
-                                            : _kSaffron.withValues(alpha: 0.3),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.arrow_upward_rounded,
-                                        color: Colors.white,
-                                        size: 22,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        // ── Trust strip ───────────────────────────────────
-                        // Row > Expanded forces tight width onto the Wrap so it
-                        // always knows when to wrap — Column(center) alone gives
-                        // Wrap unbounded width which causes the overflow on narrow
-                        // Android screens.
-                        const Row(
-                          children: [
-                            Expanded(
-                              child: Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 14,
-                                runSpacing: 6,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.verified_outlined, size: 12, color: _kMuted),
-                                      SizedBox(width: 3),
-                                      Text(
-                                        'Verified ZanCrew',
-                                        style: TextStyle(fontSize: 11.5, color: _kMuted),
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.lock_outline_rounded, size: 12, color: _kMuted),
-                                      SizedBox(width: 3),
-                                      Text(
-                                        'Secure payment',
-                                        style: TextStyle(fontSize: 11.5, color: _kMuted),
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.my_location_rounded, size: 12, color: _kMuted),
-                                      SizedBox(width: 3),
-                                      Text(
-                                        'Live tracking',
-                                        style: TextStyle(fontSize: 11.5, color: _kMuted),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // ── Policy message ────────────────────────────────
-                        if (_policyMessage != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.red.withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(
-                                    Icons.info_outline_rounded,
-                                    color: Colors.red,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      _policyMessage!,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.red,
-                                        height: 1.3,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                        if (_isLoading)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 10),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.6,
-                              color: _kSaffron,
-                            ),
-                          ),
-
-                        if (_response.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              _response,
-                              style: const TextStyle(color: Colors.red),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-
-                        ], // Expanded > Column children
-                      ),   // Column
-                    ),     // Padding
-                  ),       // Expanded
-
-                  // ── Happening near you — bottom-anchored ──────────────
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: isTyping || keyboardOpen
-                        ? const SizedBox.shrink()
-                        : _HappeningCard(
-                            key: const ValueKey('happening'),
-                            example: _examples[_exIndex],
-                            typedText: _typed,
-                            onTap: _onExampleTap,
-                          ),
-                  ),
-
-                  SizedBox(height: bottomPad),
-                ], // Column children
-              ), // Column
-
-              // ── Customer / Work segmented pill (top-left) ─────────────
-              Positioned(
-                top: 0,
-                left: 0,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Container(
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _kInk.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: Row(
+                    // ── Compact wordmark with saffron underline ────────────
+                    Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Customer — selected state (no-op; already on home)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
+                        const Text(
+                          'Zanzo',
+                          style: TextStyle(
+                            fontSize: 25,
+                            fontWeight: FontWeight.w500,
                             color: _kInk,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: const Text(
-                            'Customer',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.2,
-                            ),
+                            letterSpacing: -0.3,
                           ),
                         ),
-                        // Work — calls existing _onTapEarn()
-                        GestureDetector(
-                          onTap: _onTapEarn,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (_zancrewStatus == 'active')
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    margin: const EdgeInsets.only(right: 5),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF4ADE80),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                Text(
-                                  'Work',
-                                  style: TextStyle(
-                                    color: _zancrewEnabled
-                                        ? _kInk
-                                        : _kInk.withValues(alpha: 0.45),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        const SizedBox(height: 5),
+                        Container(
+                          width: 28,
+                          height: 2.5,
+                          decoration: BoxDecoration(
+                            color: _kSaffron,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-              ),
 
-              // ── Profile avatar with saffron ring (top-right) ──────────
-              Positioned(
-                top: 8,
-                right: 0,
-                child: GestureDetector(
-                  onTap: _onAvatarTap,
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _kSaffron,
-                        width: 2,
-                      ),
-                      color: Colors.white,
-                    ),
-                    child: Center(
-                      child: Text(
-                        _avatarInitial,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: _kInk,
-                          fontSize: 16,
-                        ),
+                    SizedBox(height: heroGap),
+
+                    // ── Hero ──────────────────────────────────────────────
+                    Text(
+                      'Hire a human\nnear you',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: heroFontSize,
+                        fontWeight: FontWeight.w500,
+                        color: _kInk,
+                        height: 1.05,
+                        letterSpacing: -0.5,
                       ),
                     ),
-                  ),
-                ),
-              ),
+                    const SizedBox(height: 12),
+                    Text(
+                      "Tell Zanzo what you need — we'll turn it into action.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: subtitleFontSize,
+                        color: _kMuted,
+                        fontWeight: FontWeight.w400,
+                        height: 1.4,
+                      ),
+                    ),
 
-              // ── Active job banner (bottom) — logic untouched ───────────
-              if (_activeJobId != null &&
-                  MediaQuery.of(context).viewInsets.bottom == 0)
+                    // ── Input card + trust strip — vertically centred ─────
+                    // Expanded absorbs the space between the hero text and the
+                    // bottom "Happening near you" section so the input sits at
+                    // the true visual midpoint on every screen size.
+                    // The bottom padding biases the column slightly above centre,
+                    // which reads more naturally when the hero text sits close
+                    // above and the bottom card is anchored below.
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: keyboardOpen ? 0 : 60),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // ── Elevated prompt card ──────────────────────────
+                            AnimatedBuilder(
+                              animation: _glowAnim,
+                              builder: (context, _) {
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    // Subtle warm gradient — top bright white,
+                                    // base drifts toward the off-white ground colour.
+                                    // Gives a softly lifted, premium surface feel
+                                    // without blur or heavy effects.
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Color(0xFFFFFFFF), // bright white top
+                                        Color(0xFFFEFBF6), // warm tinted base
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(26),
+                                    border: Border.all(
+                                      color: _kInk.withValues(alpha: 0.08),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha:
+                                              0.08 + (_glowAnim.value * 0.04),
+                                        ),
+                                        blurRadius: 36 + (10 * _glowAnim.value),
+                                        spreadRadius: 0,
+                                        offset: Offset(
+                                          0,
+                                          12 + (3 * _glowAnim.value),
+                                        ),
+                                      ),
+                                      // Warm ambient glow — premium feel without blur
+                                      BoxShadow(
+                                        color: _kSaffron.withValues(
+                                          alpha:
+                                              0.04 + (_glowAnim.value * 0.03),
+                                        ),
+                                        blurRadius: 48,
+                                        spreadRadius: 0,
+                                        offset: const Offset(0, 10),
+                                      ),
+                                    ],
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 14,
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Expanded(
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            minHeight: 100,
+                                            maxHeight: 200,
+                                          ),
+                                          child: TextField(
+                                            controller: _controller,
+                                            onChanged: (_) => setState(() {}),
+                                            onSubmitted: (_) =>
+                                                canSend ? _sendRequest() : null,
+                                            minLines: 4,
+                                            maxLines: 8,
+                                            keyboardType:
+                                                TextInputType.multiline,
+                                            textInputAction:
+                                                TextInputAction.newline,
+                                            style: const TextStyle(
+                                              color: _kInk,
+                                              fontSize: 15,
+                                              height: 1.4,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              hintText:
+                                                  'Type or speak your request…',
+                                              hintStyle: TextStyle(
+                                                color: _kMuted,
+                                                fontSize: 15,
+                                              ),
+                                              border: InputBorder.none,
+                                              contentPadding: EdgeInsets.zero,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+
+                                      // Mic — voice input, left of send
+                                      _MicButton(
+                                        isRecording: _voice.isRecording,
+                                        isLongDictating: _voice.isLongDictating,
+                                        onPressed: _toggleVoice,
+                                      ),
+                                      const SizedBox(width: 4),
+
+                                      // Send — saffron circle, rightmost final action
+                                      GestureDetector(
+                                        onTap: canSend ? _sendRequest : null,
+                                        child: Container(
+                                          width: 44,
+                                          height: 44,
+                                          decoration: BoxDecoration(
+                                            color: canSend
+                                                ? _kSaffron
+                                                : _kSaffron.withValues(
+                                                    alpha: 0.3,
+                                                  ),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.arrow_upward_rounded,
+                                            color: Colors.white,
+                                            size: 22,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+
+                            const SizedBox(height: 14),
+
+                            // ── Trust strip ───────────────────────────────────
+                            // Row > Expanded forces tight width onto the Wrap so it
+                            // always knows when to wrap — Column(center) alone gives
+                            // Wrap unbounded width which causes the overflow on narrow
+                            // Android screens.
+                            const Row(
+                              children: [
+                                Expanded(
+                                  child: Wrap(
+                                    alignment: WrapAlignment.center,
+                                    spacing: 14,
+                                    runSpacing: 6,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.verified_outlined,
+                                            size: 12,
+                                            color: _kMuted,
+                                          ),
+                                          SizedBox(width: 3),
+                                          Text(
+                                            'Verified ZanCrew',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              color: _kMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.lock_outline_rounded,
+                                            size: 12,
+                                            color: _kMuted,
+                                          ),
+                                          SizedBox(width: 3),
+                                          Text(
+                                            'Secure payment',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              color: _kMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.my_location_rounded,
+                                            size: 12,
+                                            color: _kMuted,
+                                          ),
+                                          SizedBox(width: 3),
+                                          Text(
+                                            'Live tracking',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              color: _kMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            // ── Policy message ────────────────────────────────
+                            if (_policyMessage != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.red.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(
+                                        Icons.info_outline_rounded,
+                                        color: Colors.red,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          _policyMessage!,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.red,
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                            if (_isLoading)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 10),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.6,
+                                  color: _kSaffron,
+                                ),
+                              ),
+
+                            if (_response.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  _response,
+                                  style: const TextStyle(color: Colors.red),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                          ], // Expanded > Column children
+                        ), // Column
+                      ), // Padding
+                    ), // Expanded
+                    // ── Happening near you — bottom-anchored ──────────────
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: isTyping || keyboardOpen
+                          ? const SizedBox.shrink()
+                          : _HappeningCard(
+                              key: const ValueKey('happening'),
+                              example: _examples[_exIndex],
+                              typedText: _typed,
+                              onTap: _onExampleTap,
+                            ),
+                    ),
+
+                    SizedBox(height: bottomPad),
+                  ], // Column children
+                ), // Column
+                // ── Customer / Work segmented pill (top-left) ─────────────
                 Positioned(
-                  bottom: 0,
+                  top: 0,
                   left: 0,
-                  right: 0,
-                  child: _ActiveJobBanner(
-                    taskTitle: _activeJobTitle,
-                    rawStatus: _activeJobStatus,
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CrewJobDetail(jobId: _activeJobId!),
-                        ),
-                      );
-                      _checkActiveJob();
-                    },
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _kInk.withValues(alpha: 0.1)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Customer — selected state (no-op; already on home)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _kInk,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: const Text(
+                              'Customer',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                          ),
+                          // Work — calls existing _onTapEarn()
+                          GestureDetector(
+                            onTap: _onTapEarn,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_zancrewStatus == 'active')
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      margin: const EdgeInsets.only(right: 5),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF4ADE80),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  Text(
+                                    'Work',
+                                    style: TextStyle(
+                                      color: _zancrewEnabled
+                                          ? _kInk
+                                          : _kInk.withValues(alpha: 0.45),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-            ],
+
+                // ── Profile avatar with saffron ring (top-right) ──────────
+                Positioned(
+                  top: 8,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: _onAvatarTap,
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _kSaffron, width: 2),
+                        color: Colors.white,
+                      ),
+                      child: Center(
+                        child: Text(
+                          _avatarInitial,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: _kInk,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ── Active job banner (bottom) — logic untouched ───────────
+                if (_activeJobId != null &&
+                    MediaQuery.of(context).viewInsets.bottom == 0)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: _ActiveJobBanner(
+                      taskTitle: _activeJobTitle,
+                      rawStatus: _activeJobStatus,
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CrewJobDetail(jobId: _activeJobId!),
+                          ),
+                        );
+                        _checkActiveJob();
+                      },
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

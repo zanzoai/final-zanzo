@@ -5,15 +5,12 @@
 // - No UK application → UkWorkStatusScreen
 // - UK pending → UkPendingScreen
 // - UK rejected/suspended → UkRejectedScreen
-// - UK approved + can_receive_offers → check active job → Dashboard
+// - UK approved + can_receive_offers → Dashboard
 //
 // lib/features/zancrew/gateway/zancrew_gateway.dart
 
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:zanzo_frontend/core/services/api_service.dart';
 
 import '../../../core/services/uk_provider_api.dart';
 import '../../../core/services/zancrew_api.dart';
@@ -22,7 +19,6 @@ import '../onboarding/uk_pending_screen.dart';
 import '../onboarding/uk_rejected_screen.dart';
 import '../onboarding/uk_work_status_screen.dart';
 import '../onboarding/zancrew_onboarding.dart';
-import '../screens/zancrew_JobDetails.dart';
 
 class ZanCrewGateway extends StatefulWidget {
   const ZanCrewGateway({super.key});
@@ -122,7 +118,8 @@ class _ZanCrewGatewayState extends State<ZanCrewGateway> {
         return;
       }
 
-      final providerStatus = ukStatus['provider_status'] as String? ?? 'pending';
+      final providerStatus =
+          ukStatus['provider_status'] as String? ?? 'pending';
       final canReceive = ukStatus['can_receive_offers'] == true;
 
       if (providerStatus == 'pending') {
@@ -153,33 +150,6 @@ class _ZanCrewGatewayState extends State<ZanCrewGateway> {
           MaterialPageRoute(builder: (_) => const UkPendingScreen()),
         );
         return;
-      }
-
-      // -----------------------------------------------------------------------
-      // CASE D — Check if this crew has an ACTIVE JOB
-      // -----------------------------------------------------------------------
-      try {
-        final activeRes = await ApiService.getJson(
-          '/zancrew/active_task',
-        );
-
-        if (activeRes.statusCode == 200) {
-          final decoded = jsonDecode(activeRes.body);
-
-          if (decoded is Map &&
-              decoded['active'] == true &&
-              decoded['task_id'] != null) {
-            final jobId = decoded['task_id'].toString();
-            if (!mounted) return;
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => CrewJobDetail(jobId: jobId)),
-            );
-            return;
-          }
-        }
-      } catch (_) {
-        // ignore error → fall through to dashboard
       }
 
       // -----------------------------------------------------------------------

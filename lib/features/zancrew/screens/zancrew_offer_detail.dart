@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/widgets/payment_chip.dart';
 import '../onboarding/uk_bank_details_screen.dart';
+import 'zancrew_JobDetails.dart';
 
 class CrewOfferDetail extends StatefulWidget {
   final Map<String, dynamic> offer;
@@ -303,13 +304,23 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
 
     setState(() => _posting = true);
     try {
-      await ApiService.acceptOffer(_offerId);
+      final result = await ApiService.acceptOffer(_offerId);
       if (!mounted) return;
+
+      final taskId = (result['task_id'] ?? result['job_id'])?.toString();
 
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Accepted')));
-      Navigator.of(context).pop('accepted');
+
+      if (taskId != null && taskId.isNotEmpty) {
+        await Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => CrewJobDetail(jobId: taskId)));
+        if (mounted) Navigator.of(context).pop('accepted');
+      } else {
+        Navigator.of(context).pop('accepted');
+      }
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().toLowerCase();
