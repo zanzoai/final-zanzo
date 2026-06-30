@@ -12,6 +12,7 @@
 // lib/features/zancrew/dashboard/zancrew_dashboard.dart
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -61,6 +62,10 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   Timer? _locationTimer;
 
   double _todayEarnings = 0;
+
+  String? _activeJobId;
+  String? _activeJobTitle;
+  String? _activeJobStatus;
 
   static const List<String> _defaultBucketCatalog = [
     'Delivery',
@@ -116,6 +121,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     if (state == AppLifecycleState.resumed && _online && _crewUserId != null) {
       debugPrint('[ZanCrew] app resumed — refreshing offers');
       _refreshOffers(status: 'offered');
+      _checkActiveJob();
     }
   }
 
@@ -378,6 +384,37 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     } else {
       // Still refresh earnings even if offline, so earnings card is always current
       _recalculateTodayEarningsFromOffers(_currentTab);
+    }
+
+    unawaited(_checkActiveJob());
+  }
+
+  // ---------------------------------------------------------------------------
+  // ACTIVE JOB CHECK
+  // ---------------------------------------------------------------------------
+  Future<void> _checkActiveJob() async {
+    if (_crewUserId == null) return;
+    try {
+      final res = await ApiService.getJson('/zancrew/active_task');
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is Map && data['active'] == true) {
+          setState(() {
+            _activeJobId = (data['task_id'] ?? data['job_id'])?.toString();
+            _activeJobTitle = data['task_title']?.toString();
+            _activeJobStatus = data['status']?.toString();
+          });
+          return;
+        }
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _activeJobId = null;
+        _activeJobTitle = null;
+        _activeJobStatus = null;
+      });
     }
   }
 
@@ -1014,6 +1051,141 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     );
   }
 
+  String _prettyStatus(String s) {
+    switch (s.toLowerCase()) {
+      case 'in_progress':
+        return 'In progress';
+      case 'accepted':
+        return 'Accepted';
+      case 'completed':
+        return 'Completed';
+      default:
+        return s;
+    }
+  }
+
+  String _activeJobNextAction(String? status) {
+    switch ((status ?? '').toLowerCase()) {
+      case 'accepted':
+        return 'Start the job with a PIN from the customer';
+      case 'in_progress':
+        return 'End the job with a PIN from the customer';
+      default:
+        return 'Continue job';
+    }
+  }
+
+  Widget _buildActiveJobCard() {
+    final title = _activeJobTitle ?? 'Active job';
+    final status = _activeJobStatus ?? '';
+    final nextAction = _activeJobNextAction(status);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () async {
+        if (_activeJobId == null) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => CrewJobDetail(jobId: _activeJobId!),
+          ),
+        );
+        if (mounted) {
+          _checkActiveJob();
+          _refreshOffers(status: _currentTab);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: _accent.withValues(alpha: 0.45),
+            width: 1.5,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 16,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                color: _success,
+                shape: BoxShape.circle,
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: _ink,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          _prettyStatus(status),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: _accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    nextAction,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: _muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Continue job →',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: _accent,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _softCard({required Widget child, EdgeInsets? padding}) {
     return Container(
       decoration: BoxDecoration(
@@ -1065,7 +1237,9 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: _accent)),
+      );
     }
 
     final isInbox = _currentTab == 'offered';
@@ -1083,7 +1257,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
           title: const Text(
-            'ZanCrew Dashboard',
+            'ZanCrew',
             style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
           ),
           leading: IconButton(
@@ -1232,6 +1406,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
         const SizedBox(height: 12),
 
+        if (_activeJobId != null) ...[
+          _buildActiveJobCard(),
+          const SizedBox(height: 12),
+        ],
+
         Expanded(
           child: !_online
               ? const Center(
@@ -1319,7 +1498,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   Widget _buildOffersList(bool isInbox) {
     if (_offersLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _accent));
     }
 
     if (_offers.isEmpty) {
