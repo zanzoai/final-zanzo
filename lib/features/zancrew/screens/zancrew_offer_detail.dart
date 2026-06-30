@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/api_service.dart';
 import '../../../core/widgets/payment_chip.dart';
+import '../onboarding/uk_bank_details_screen.dart';
 
 class CrewOfferDetail extends StatefulWidget {
   final Map<String, dynamic> offer;
@@ -311,9 +312,17 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
       Navigator.of(context).pop('accepted');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Accept failed: $e')));
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('403') ||
+          msg.contains('bank') ||
+          msg.contains('kyc') ||
+          msg.contains('verified')) {
+        _showBankMissingSheet();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to accept. Please try again.')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _posting = false);
     }
@@ -333,9 +342,9 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
       Navigator.of(context).pop('rejected');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Reject failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to reject. Please try again.')),
+      );
     } finally {
       if (mounted) setState(() => _posting = false);
     }
@@ -345,11 +354,103 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
   // Premium UI helpers (no backend changes)
   // -----------------------------------------------------------------------------
 
-  static const Color _bg = Color(0xFFF6F7F9);
+  void _showBankMissingSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: _border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Add bank details to accept jobs',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  color: _ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'We need your bank details before you can accept paid work.',
+                style: TextStyle(fontSize: 14, color: _muted, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const UkBankDetailsScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Add bank details',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    'Not now',
+                    style: TextStyle(
+                      color: _muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const Color _accent = Color(0xFFD97706);
+  static const Color _bg = Color(0xFFFCFAF6);
+  static const Color _surface = Color(0xFFF5F2EE);
   static const Color _card = Colors.white;
-  static const Color _ink = Color(0xFF111827);
-  static const Color _muted = Color(0xFF6B7280);
-  static const Color _border = Color(0xFFE5E7EB);
+  static const Color _ink = Color(0xFF26211C);
+  static const Color _muted = Color(0xFF9B8B7E);
+  static const Color _border = Color(0xFFE8E2D9);
+  static const Color _success = Color(0xFF16A34A);
 
   Widget _softCard({required Widget child, EdgeInsets? padding}) {
     return Container(
@@ -385,7 +486,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: _surface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: _border),
       ),
@@ -411,7 +512,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: _surface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: _border),
       ),
@@ -441,9 +542,14 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
+        backgroundColor: _bg,
+        foregroundColor: _ink,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: const Text(
-          'Offer',
-          style: TextStyle(fontWeight: FontWeight.w800),
+          'Job Offer',
+          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
         ),
         actions: [
           IconButton(
@@ -473,12 +579,12 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
               if (_hasActiveJob)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(
+                  child: const Text(
                     'You already have an active job. Complete it before accepting another offer.',
                     style: TextStyle(
-                      color: Colors.orange.shade800,
+                      color: _accent,
                       fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -519,10 +625,10 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           elevation: 0,
-                          backgroundColor: Colors.black,
+                          backgroundColor: _accent,
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey.shade300,
-                          disabledForegroundColor: Colors.grey.shade600,
+                          disabledBackgroundColor: _border,
+                          disabledForegroundColor: _muted,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -613,7 +719,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 12.5,
-                                color: Color(0xFF16A34A),
+                                color: _success,
                               ),
                             ),
                           ),
@@ -658,10 +764,10 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                         ),
 
                         const SizedBox(height: 12),
-                        Text(
+                        const Text(
                           'Decide fast, but decide confidently.',
                           style: TextStyle(
-                            color: _muted.withOpacity(0.95),
+                            color: _muted,
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
                           ),
@@ -686,7 +792,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                             child: Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF9FAFB),
+                                color: _surface,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: _border),
                               ),
@@ -773,16 +879,14 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                                     width: 18,
                                     height: 18,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFEFF6FF),
+                                      color: const Color(0xFFFEF3C7),
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: const Color(0xFFDBEAFE),
-                                      ),
+                                      border: Border.all(color: _border),
                                     ),
                                     child: const Icon(
                                       Icons.check,
                                       size: 14,
-                                      color: Color(0xFF2563EB),
+                                      color: _accent,
                                     ),
                                   ),
                                   const SizedBox(width: 10),
@@ -801,10 +905,10 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                               ),
                             );
                           }).toList(),
-                          Text(
+                          const Text(
                             'If this matches your skills and time, accept.',
                             style: TextStyle(
-                              color: _muted.withOpacity(0.95),
+                              color: _muted,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
                             ),

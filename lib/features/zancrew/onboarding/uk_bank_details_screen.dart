@@ -11,10 +11,13 @@ class UkBankDetailsScreen extends StatefulWidget {
 }
 
 class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
-  static const Color _bg = Color(0xFFF6F7F9);
-  static const Color _ink = Color(0xFF111827);
-  static const Color _muted = Color(0xFF6B7280);
-  static const Color _border = Color(0xFFD1D5DB);
+  static const Color _accent = Color(0xFFD97706);
+  static const Color _bg = Color(0xFFFCFAF6);
+  static const Color _surface = Color(0xFFF5F2EE);
+  static const Color _ink = Color(0xFF26211C);
+  static const Color _muted = Color(0xFF9B8B7E);
+  static const Color _border = Color(0xFFE8E2D9);
+  static const Color _success = Color(0xFF16A34A);
 
   bool _loading = true;
   bool _saving = false;
@@ -60,11 +63,9 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
 
   bool get _hasSaved => _saved?['has_bank_details'] == true;
 
-  bool _sortCodeValid(String v) =>
-      v.replaceAll(RegExp(r'\D'), '').length == 6;
+  bool _sortCodeValid(String v) => v.replaceAll(RegExp(r'\D'), '').length == 6;
 
-  bool _accountValid(String v) =>
-      v.replaceAll(RegExp(r'\D'), '').length == 8;
+  bool _accountValid(String v) => v.replaceAll(RegExp(r'\D'), '').length == 8;
 
   bool get _formValid {
     final name = _nameCtrl.text.trim();
@@ -100,9 +101,9 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
         _editing = false;
         _saving = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bank details saved')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Bank details saved')));
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -120,9 +121,11 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: _bg,
         foregroundColor: _ink,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Bank Details',
           style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
@@ -157,7 +160,7 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: _border),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x0A000000),
@@ -179,11 +182,7 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
                         color: const Color(0xFFECFDF5),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(
-                        Icons.check,
-                        size: 18,
-                        color: Color(0xFF16A34A),
-                      ),
+                      child: const Icon(Icons.check, size: 18, color: _success),
                     ),
                     const SizedBox(width: 12),
                     const Text(
@@ -197,7 +196,7 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFE5E7EB)),
+              const Divider(height: 1, color: _border),
               _detailRow('Account holder', name),
               _detailRow('Account', '••••$last4'),
               _detailRow('Sort code', sortDisplay),
@@ -308,7 +307,7 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
           children: [
             Checkbox(
               value: _confirmed,
-              activeColor: Colors.black,
+              activeColor: _accent,
               onChanged: (v) => setState(() => _confirmed = v ?? false),
             ),
             const SizedBox(width: 4),
@@ -334,10 +333,10 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
           child: ElevatedButton(
             onPressed: _formValid && !_saving ? _save : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
+              backgroundColor: _accent,
               foregroundColor: Colors.white,
               elevation: 0,
-              disabledBackgroundColor: const Color(0xFFD1D5DB),
+              disabledBackgroundColor: _border,
               disabledForegroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -378,23 +377,23 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
   Widget _buildInfoBanner() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF),
+        color: const Color(0xFFFEF3C7),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFBFDBFE)),
+        border: Border.all(color: _border),
       ),
       padding: const EdgeInsets.all(14),
-      child: Row(
+      child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, size: 18, color: Color(0xFF3B82F6)),
-          const SizedBox(width: 10),
-          const Expanded(
+          Icon(Icons.info_outline, size: 18, color: _accent),
+          SizedBox(width: 10),
+          Expanded(
             child: Text(
               'Your bank details are used to process your earnings. '
               'These are stored securely and only seen by the Zanzo payments team.',
               style: TextStyle(
                 fontSize: 13.5,
-                color: Color(0xFF1E40AF),
+                color: _ink,
                 fontWeight: FontWeight.w600,
                 height: 1.4,
               ),
@@ -422,7 +421,7 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
           style: const TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF374151),
+            color: _ink,
           ),
         ),
         const SizedBox(height: 6),
@@ -435,10 +434,10 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
+            hintStyle: const TextStyle(color: _muted),
             counterText: '',
             filled: true,
-            fillColor: Colors.white,
+            fillColor: _surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 14,
