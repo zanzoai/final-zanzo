@@ -20,6 +20,17 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  // Warm Zanzo palette
+  static const Color _accent = Color(0xFFD97706);
+  static const Color _bg = Color(0xFFFCFAF6);
+  static const Color _surface = Color(0xFFF5F2EE);
+  static const Color _card = Colors.white;
+  static const Color _ink = Color(0xFF26211C);
+  static const Color _muted = Color(0xFF8C8378);
+  static const Color _line = Color(0xFFE8E2D9);
+  static const Color _success = Color(0xFF16A34A);
+  static const Color _warning = Color(0xFFF59E0B);
+
   String? _name;
   String? _phone;
   String? _email;
@@ -31,8 +42,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<String> _zancrewBuckets = const [];
   bool _bankVerified = false;
   bool _kycVerified = false;
-
-  Color get purple => const Color(0xFF6C4DFF);
 
   @override
   void initState() {
@@ -118,6 +127,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
   }
 
+  // ---------------------------------------------------------------------------
+  // DISPLAY HELPERS
+  // ---------------------------------------------------------------------------
+
+  /// Capitalises the first letter of each word; trims whitespace. Display-only.
+  String _displayName(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '—';
+    return raw
+        .trim()
+        .split(RegExp(r'\s+'))
+        .map((w) {
+          if (w.isEmpty) return w;
+          return w[0].toUpperCase() + w.substring(1);
+        })
+        .join(' ');
+  }
+
+  /// Formats a +44 number as "+44 XXXX XXXXXX". Display-only.
+  String _formatPhone(String? phone) {
+    if (phone == null || phone.isEmpty) return '—';
+    final s = phone.trim();
+    if (RegExp(r'^\+44\d{10}$').hasMatch(s)) {
+      return '${s.substring(0, 3)} ${s.substring(3, 7)} ${s.substring(7)}';
+    }
+    return s;
+  }
+
   @override
   Widget build(BuildContext context) {
     final signedIn = (_phone != null && _phone!.isNotEmpty);
@@ -126,14 +162,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : '?';
 
     return Scaffold(
+      backgroundColor: _bg,
       appBar: AppBar(
-        title: const Text("Profile"),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        title: const Text(
+          "Profile",
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        backgroundColor: _bg,
+        foregroundColor: _ink,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: _accent))
           : (!signedIn ? _loginRequired() : _profileBody(initial)),
     );
   }
@@ -143,13 +185,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ---------------------------------------------------------------------------
   Widget _loginRequired() {
     return Center(
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: purple,
-          foregroundColor: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.person_outline_rounded,
+              size: 64,
+              color: _accent.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Sign in to view your profile",
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: _ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Track orders, manage your account, and more.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: _muted),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 14,
+                ),
+              ),
+              onPressed: _signIn,
+              child: const Text(
+                "Sign in",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
         ),
-        onPressed: _signIn,
-        child: const Text("Sign in"),
       ),
     );
   }
@@ -180,90 +262,108 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ---------------------------------------------------------------------------
   Widget _identityHeader(String initial) {
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: purple.withOpacity(0.06),
+        color: _card,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: purple.withOpacity(0.12)),
+        border: Border.all(color: _line),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: purple.withOpacity(0.15),
-                child: Text(
-                  initial,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: purple,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _name ?? '—',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: _accent.withValues(alpha: 0.12),
+                    child: Text(
+                      initial,
                       style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
+                        color: _accent,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _trustPill(Icons.verified, "Phone verified"),
-                        _trustPill(Icons.lock_outline, "Secure account"),
+                        Text(
+                          _displayName(_name),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: _ink,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            _trustPill(Icons.verified, 'Verified'),
+                            _trustPill(Icons.lock_outline, 'Secure'),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _contactRow(
-            label: "Phone",
-            value: _phone ?? '—',
-            action: "Change",
-            onTap: () async {
-              final newPhone = await showChangePhoneDialog(
-                context,
-                currentPhone: _phone,
-              );
-              if (newPhone is String) {
-                final verified = await showVerifyPhoneOtpDialog(
+            ),
+            Divider(height: 1, color: _line),
+            _accountRow(
+              icon: Icons.phone_outlined,
+              label: 'Phone',
+              value: _formatPhone(_phone),
+              action: 'Change',
+              onTap: () async {
+                final newPhone = await showChangePhoneDialog(
                   context,
-                  newPhone: newPhone,
+                  currentPhone: _phone,
                 );
-                if (verified == true) await _loadProfile();
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-          _contactRow(
-            label: "Email",
-            value: _email?.isNotEmpty == true ? _email! : "Optional",
-            helper: _email?.isNotEmpty == true
-                ? null
-                : "Add email for receipts & recovery",
-            action: (_email?.isNotEmpty ?? false) ? "Edit" : "Add",
-            onTap: () async {
-              final prefs = await SharedPreferences.getInstance();
-              final token = prefs.getString('access_token');
-              if (token == null) return _signIn();
-
-              final result = await showAddEmailDialog(context, current: _email);
-              if (result == true) setState(() {});
-            },
-          ),
-        ],
+                if (newPhone is String) {
+                  final verified = await showVerifyPhoneOtpDialog(
+                    context,
+                    newPhone: newPhone,
+                  );
+                  if (verified == true) await _loadProfile();
+                }
+              },
+            ),
+            Divider(height: 1, color: _line),
+            _accountRow(
+              icon: Icons.mail_outline_rounded,
+              label: 'Email',
+              value: _email?.isNotEmpty == true ? _email! : 'Not added',
+              caption: _email?.isNotEmpty == true
+                  ? null
+                  : 'Add for receipts & recovery',
+              action: (_email?.isNotEmpty ?? false) ? 'Edit' : 'Add',
+              onTap: () async {
+                final prefs = await SharedPreferences.getInstance();
+                final token = prefs.getString('access_token');
+                if (token == null) return _signIn();
+                final result = await showAddEmailDialog(
+                  context,
+                  current: _email,
+                );
+                if (result == true) setState(() {});
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -272,76 +372,95 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surface,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.black12),
+        border: Border.all(color: _line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: purple),
+          Icon(icon, size: 14, color: _accent),
           const SizedBox(width: 6),
           Text(
             text,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _ink,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _contactRow({
+  Widget _accountRow({
+    required IconData icon,
     required String label,
     required String value,
-    String? helper,
+    String? caption,
     required String action,
     required VoidCallback onTap,
   }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black54,
-                ),
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 13, 14, 13),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(height: 3),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (helper != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  helper,
-                  style: const TextStyle(fontSize: 12, color: Colors.black45),
-                ),
-              ],
-            ],
-          ),
-        ),
-        TextButton(
-          onPressed: onTap,
-          style: TextButton.styleFrom(
-            foregroundColor: purple,
-            textStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+              child: Icon(icon, size: 18, color: _muted),
             ),
-          ),
-          child: Text(action),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _muted,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: _ink,
+                    ),
+                  ),
+                  if (caption != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      caption,
+                      style: const TextStyle(fontSize: 12, color: _muted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              action,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: _accent,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -349,59 +468,164 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ZANCrew CARD
   // ---------------------------------------------------------------------------
   Widget _zanCrewCard() {
-    final statusColor = {
-      'active': Colors.green[700],
-      'pending': Colors.orange[700],
-      'rejected': Colors.red[700],
-      'off': Colors.black54,
-    }[_zancrewStatus]!;
+    final Color fg;
+    final Color bg;
+    switch (_zancrewStatus) {
+      case 'active':
+        fg = _success;
+        bg = const Color(0xFFDCFCE7);
+        break;
+      case 'pending':
+        fg = _warning;
+        bg = const Color(0xFFFEF3C7);
+        break;
+      case 'rejected':
+        fg = const Color(0xFFDC2626);
+        bg = const Color(0xFFFFEBEB);
+        break;
+      default:
+        fg = _muted;
+        bg = _surface;
+    }
 
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    const int chipMax = 3;
+    final visible = _zancrewBuckets.take(chipMax).toList();
+    final overflow = _zancrewBuckets.length - chipMax;
+
+    final statusLabel = _zancrewStatus == 'active'
+        ? 'Active'
+        : _zancrewStatus == 'pending'
+        ? 'Pending'
+        : _zancrewStatus == 'rejected'
+        ? 'Rejected'
+        : 'Off';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _line),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title + status badge on same row
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'ZanCrew',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: fg.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: fg,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: fg,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (_zancrewBuckets.isNotEmpty) ...[
+            const SizedBox(height: 10),
             Text(
-              "ZanCrew Status",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: purple,
+              '${_zancrewBuckets.length} '
+              '${_zancrewBuckets.length == 1 ? 'service' : 'services'}',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _muted,
               ),
             ),
             const SizedBox(height: 10),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Icon(Icons.work_outline, color: statusColor),
-                const SizedBox(width: 8),
-                Text(
-                  _zancrewStatus.toUpperCase(),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: statusColor,
+                ...visible.map(
+                  (b) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _line),
+                    ),
+                    child: Text(
+                      b,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _ink,
+                      ),
+                    ),
                   ),
                 ),
+                if (overflow > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _line),
+                    ),
+                    child: Text(
+                      '+$overflow more',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _muted,
+                      ),
+                    ),
+                  ),
               ],
             ),
-            const SizedBox(height: 12),
-            if (_zancrewBuckets.isNotEmpty)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _zancrewBuckets
-                    .map(
-                      (b) => Chip(
-                        label: Text(b),
-                        backgroundColor: purple.withOpacity(0.12),
-                        labelStyle: TextStyle(color: purple),
-                      ),
-                    )
-                    .toList(),
-              ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -410,29 +634,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ACTIONS
   // ---------------------------------------------------------------------------
   Widget _actionsCard() {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        children: [
-          ListTile(
-            leading: Icon(Icons.history, color: purple),
-            title: const Text("My Orders"),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const JobHistoryScreen()),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: Icon(Icons.settings, color: purple),
-            title: const Text("Settings"),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {},
+    return Container(
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _line),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const JobHistoryScreen()),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history_rounded, color: _accent, size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "My Orders",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _ink,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: _muted),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Divider(height: 1, color: _line),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {},
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings_outlined, color: _muted, size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "Settings",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _ink,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: _muted),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
