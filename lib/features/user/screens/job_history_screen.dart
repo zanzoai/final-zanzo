@@ -1,6 +1,3 @@
-// This screen fetches and displays the user’s full job history, showing each job in an expandable card with detailed information.
-//It also allows users to either track an ongoing job or re-request a completed job with pre-filled details
-
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -17,6 +14,17 @@ class JobHistoryScreen extends StatefulWidget {
 }
 
 class _JobHistoryScreenState extends State<JobHistoryScreen> {
+  // Warm Zanzo palette
+  static const Color _accent = Color(0xFFD97706);
+  static const Color _bg = Color(0xFFFCFAF6);
+  static const Color _surface = Color(0xFFF5F2EE);
+  static const Color _card = Colors.white;
+  static const Color _ink = Color(0xFF26211C);
+  static const Color _muted = Color(0xFF8C8378);
+  static const Color _line = Color(0xFFE8E2D9);
+  static const Color _success = Color(0xFF16A34A);
+  static const Color _warning = Color(0xFFF59E0B);
+
   List jobs = [];
   bool isLoading = true;
 
@@ -127,9 +135,9 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
 
     if (s == 'payment_pending') {
       return (
-        bg: const Color(0xFFE3F2FD),
-        border: const Color(0xFF64B5F6),
-        text: const Color(0xFF1565C0),
+        bg: const Color(0xFFFFF3E9),
+        border: _warning,
+        text: _accent,
       );
     }
 
@@ -184,8 +192,29 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
         children: [
           Text(icon),
           const SizedBox(width: 8),
-          Expanded(child: Text(text)),
+          Expanded(
+            child: Text(text, style: TextStyle(color: _ink)),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _warmChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _line),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: _ink,
+        ),
       ),
     );
   }
@@ -206,22 +235,28 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _bg,
       appBar: AppBar(
-        title: const Text("My Job History"),
-        backgroundColor: Colors.orangeAccent,
+        title: const Text(
+          "My Job History",
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        backgroundColor: _bg,
+        foregroundColor: _ink,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
-            onPressed: isLoading
-                ? null
-                : () async {
-                    setState(() => isLoading = true);
-                    await _fetchJobs();
-                  },
+            onPressed: isLoading ? null : _fetchJobs,
             icon: isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _accent,
+                    ),
                   )
                 : const Icon(Icons.refresh),
           ),
@@ -230,312 +265,375 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : jobs.isEmpty
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  "No orders yet.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            )
+          ? _emptyState()
           : ListView.separated(
               padding: const EdgeInsets.all(12),
               itemCount: jobs.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final job = jobs[index] as Map<String, dynamic>;
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) =>
+                  _jobCard(context, jobs[index] as Map<String, dynamic>),
+            ),
+    );
+  }
 
-                final jobId = _safeStr(job['id']);
-                final backendConcise = _safeStr(job['concise_title']);
+  Widget _emptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 56,
+              color: _accent.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "No orders yet",
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: _ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Your completed orders will appear here.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: _muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                final title = backendConcise.isNotEmpty
-                    ? backendConcise
-                    : _safeStr(
-                        job['title'],
-                        _safeStr(
-                          job['short_title'],
-                          _safeStr(job['polished_task'], 'Your Task'),
-                        ),
-                      );
+  Widget _jobCard(BuildContext context, Map<String, dynamic> job) {
+    final jobId = _safeStr(job['id']);
+    final backendConcise = _safeStr(job['concise_title']);
 
-                final created = _fmtDate(job['created_at']);
-                final location = _safeStr(job['location_address']);
-                final statusRaw = _safeStr(job['status']);
-                final status = _statusLabel(statusRaw);
+    final title = backendConcise.isNotEmpty
+        ? backendConcise
+        : _safeStr(
+            job['title'],
+            _safeStr(
+              job['short_title'],
+              _safeStr(job['polished_task'], 'Your Task'),
+            ),
+          );
 
-                final description = _safeStr(job['polished_task']);
+    final created = _fmtDate(job['created_at']);
+    final location = _safeStr(job['location_address']);
+    final statusRaw = _safeStr(job['status']);
+    final status = _statusLabel(statusRaw);
 
-                final notesAny = job['notes'];
-                final notesList = _safeStrList(notesAny);
-                final notesText = (notesAny is String) ? notesAny.trim() : '';
+    final description = _safeStr(job['polished_task']);
 
-                final actions = _safeStrList(job['actions']);
-                final tags = _safeStrList(job['tags']);
+    final notesAny = job['notes'];
+    final notesList = _safeStrList(notesAny);
+    final notesText = (notesAny is String) ? notesAny.trim() : '';
 
-                final scheduled = _fmtDate(job['scheduled_at']);
-                final completed = _fmtDate(job['completed_at']);
-                final paidAt = _fmtDate(job['paid_at']);
+    final actions = _safeStrList(job['actions']);
+    final tags = _safeStrList(job['tags']);
 
-                final duration = _safeStr(job['duration_hours']);
-                final people = _safeStr(job['people_required']);
+    final scheduled = _fmtDate(job['scheduled_at']);
+    final completed = _fmtDate(job['completed_at']);
+    final paidAt = _fmtDate(job['paid_at']);
 
-                final amount = job['estimated_amount'];
-                final currency = _safeStr(job['currency'], 'GBP').toUpperCase();
-                final symbol = currency == 'GBP'
-                    ? '£'
-                    : currency == 'INR'
-                    ? '₹'
-                    : currency;
-                final cost = (amount is num)
-                    ? amount.toStringAsFixed(
-                        amount.truncateToDouble() == amount ? 0 : 2,
+    final duration = _safeStr(job['duration_hours']);
+    final people = _safeStr(job['people_required']);
+
+    final amount = job['estimated_amount'];
+    final currency = _safeStr(job['currency'], 'GBP').toUpperCase();
+    final symbol = currency == 'GBP'
+        ? '£'
+        : currency == 'INR'
+        ? '₹'
+        : currency;
+    final cost = (amount is num)
+        ? amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2)
+        : '';
+
+    final isActive = !_isCompletedStatus(statusRaw);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _line),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Theme(
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                backgroundColor: _card,
+                collapsedBackgroundColor: _card,
+                tilePadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                title: Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w700, color: _ink),
+                ),
+                subtitle: Text(
+                  [
+                    if (created.isNotEmpty) created,
+                    if (location.isNotEmpty && location != 'Unknown address')
+                      location,
+                  ].join(' • '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: _muted, fontSize: 12),
+                ),
+                trailing: _pill(status, rawStatus: statusRaw),
+                children: [
+                  if (description.isNotEmpty) ...[
+                    Text(
+                      "Requirements",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      description,
+                      style: TextStyle(height: 1.35, color: _ink),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (notesList.isNotEmpty || notesText.isNotEmpty) ...[
+                    Text(
+                      "Important Notes",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    if (notesList.isNotEmpty)
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: notesList.map(_warmChip).toList(),
                       )
-                    : '';
-
-                return Card(
-                  elevation: 1,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Theme(
-                    data: Theme.of(
-                      context,
-                    ).copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      tilePadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
+                    else
+                      Text(
+                        notesText,
+                        style: TextStyle(height: 1.35, color: _ink),
                       ),
-                      childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                      title: Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                    const SizedBox(height: 12),
+                  ],
+                  if (actions.isNotEmpty) ...[
+                    Text(
+                      "Expected Actions",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
                       ),
-                      subtitle: Text(
-                        [
-                          if (created.isNotEmpty) created,
-                          if (location.isNotEmpty &&
-                              location != 'Unknown address')
-                            location,
-                        ].join(' • '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: _pill(status, rawStatus: statusRaw),
-                      children: [
-                        if (description.isNotEmpty) ...[
-                          const Text(
-                            "Requirements",
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            description,
-                            style: const TextStyle(height: 1.35),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (notesList.isNotEmpty || notesText.isNotEmpty) ...[
-                          const Text(
-                            "Important Notes",
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 6),
-                          if (notesList.isNotEmpty)
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: -6,
-                              children: notesList
-                                  .map(
-                                    (n) => Chip(
-                                      label: Text(n),
-                                      backgroundColor: Colors.orange.shade50,
-                                      shape: StadiumBorder(
-                                        side: BorderSide(
-                                          color: Colors.orange.shade200,
-                                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: actions
+                          .map(
+                            (a) => Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("•  ", style: TextStyle(color: _ink)),
+                                  Expanded(
+                                    child: Text(
+                                      a,
+                                      style: TextStyle(
+                                        height: 1.35,
+                                        color: _ink,
                                       ),
                                     ),
-                                  )
-                                  .toList(),
-                            )
-                          else
-                            Text(
-                              notesText,
-                              style: const TextStyle(height: 1.35),
+                                  ),
+                                ],
+                              ),
                             ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (actions.isNotEmpty) ...[
-                          const Text(
-                            "Expected Actions",
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 6),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: actions
-                                .map(
-                                  (a) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text("•  "),
-                                        Expanded(
-                                          child: Text(
-                                            a,
-                                            style: const TextStyle(
-                                              height: 1.35,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (tags.isNotEmpty) ...[
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: -6,
-                            children: tags
-                                .map(
-                                  (t) => Chip(
-                                    label: Text(t),
-                                    backgroundColor: Colors.orange.shade50,
-                                    shape: StadiumBorder(
-                                      side: BorderSide(
-                                        color: Colors.orange.shade200,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        _kvRow(icon: '📍', text: location),
-                        _kvRow(
-                          icon: '🕒',
-                          text: created.isNotEmpty ? 'Ordered: $created' : '',
-                        ),
-                        _kvRow(
-                          icon: '🗓️',
-                          text: scheduled.isNotEmpty
-                              ? 'Scheduled: $scheduled'
-                              : '',
-                        ),
-                        _kvRow(
-                          icon: '✅',
-                          text: completed.isNotEmpty
-                              ? 'Completed: $completed'
-                              : '',
-                        ),
-                        _kvRow(
-                          icon: '💳',
-                          text: paidAt.isNotEmpty ? 'Paid at: $paidAt' : '',
-                        ),
-                        _kvRow(
-                          icon: '⏱️',
-                          text: duration.isNotEmpty
-                              ? 'Duration: $duration hours'
-                              : '',
-                        ),
-                        _kvRow(
-                          icon: '👥',
-                          text: people.isNotEmpty
-                              ? 'People Required: $people'
-                              : '',
-                        ),
-                        _kvRow(
-                          icon: '💰',
-                          text: cost.isNotEmpty
-                              ? 'Estimated: $symbol$cost'
-                              : '',
-                        ),
-                        const SizedBox(height: 14),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: _isCompletedStatus(statusRaw)
-                              ? ElevatedButton.icon(
-                                  icon: const Icon(Icons.refresh),
-                                  label: const Text("Request Again"),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onPressed: () {
-                                    final prefill = Map<String, dynamic>.from(
-                                      job,
-                                    );
+                          )
+                          .toList(),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (tags.isNotEmpty) ...[
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: tags.map(_warmChip).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  _kvRow(icon: '📍', text: location),
+                  _kvRow(
+                    icon: '🕒',
+                    text: created.isNotEmpty ? 'Ordered: $created' : '',
+                  ),
+                  _kvRow(
+                    icon: '🗓️',
+                    text: scheduled.isNotEmpty ? 'Scheduled: $scheduled' : '',
+                  ),
+                  _kvRow(
+                    icon: '✅',
+                    text: completed.isNotEmpty ? 'Completed: $completed' : '',
+                  ),
+                  _kvRow(
+                    icon: '💳',
+                    text: paidAt.isNotEmpty ? 'Paid at: $paidAt' : '',
+                  ),
+                  _kvRow(
+                    icon: '⏱️',
+                    text: duration.isNotEmpty
+                        ? 'Duration: $duration hours'
+                        : '',
+                  ),
+                  _kvRow(
+                    icon: '👥',
+                    text: people.isNotEmpty ? 'People Required: $people' : '',
+                  ),
+                  _kvRow(
+                    icon: '💰',
+                    text: cost.isNotEmpty ? 'Estimated: $symbol$cost' : '',
+                  ),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _isCompletedStatus(statusRaw)
+                        ? ElevatedButton.icon(
+                            icon: const Icon(Icons.refresh),
+                            label: const Text("Request Again"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _success,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            onPressed: () {
+                              final prefill = Map<String, dynamic>.from(job);
 
-                                    final anyNotes = prefill['notes'];
-                                    if (anyNotes is String) {
-                                      final chips = anyNotes
-                                          .split(RegExp(r'\s*,\s*'))
-                                          .map((e) => e.trim())
-                                          .where((e) => e.isNotEmpty)
-                                          .toList();
-                                      prefill['notes'] = chips;
-                                    }
+                              final anyNotes = prefill['notes'];
+                              if (anyNotes is String) {
+                                final chips = anyNotes
+                                    .split(RegExp(r'\s*,\s*'))
+                                    .map((e) => e.trim())
+                                    .where((e) => e.isNotEmpty)
+                                    .toList();
+                                prefill['notes'] = chips;
+                              }
 
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ReviewTaskScreen(
+                                    taskType: title,
+                                    taskDetail: prefill,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : ElevatedButton.icon(
+                            icon: const Icon(Icons.map_outlined),
+                            label: const Text("Track Job"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _accent,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            onPressed: jobId.isEmpty
+                                ? null
+                                : () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => ReviewTaskScreen(
-                                          taskType: title,
-                                          taskDetail: prefill,
+                                        builder: (context) => TrackJobScreen(
+                                          taskTitle: title,
+                                          userLocation: location.isNotEmpty
+                                              ? location
+                                              : 'Unknown location',
+                                          jobId: jobId,
                                         ),
                                       ),
                                     );
                                   },
-                                )
-                              : ElevatedButton.icon(
-                                  icon: const Icon(Icons.map_outlined),
-                                  label: const Text("Track Job"),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.orangeAccent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onPressed: jobId.isEmpty
-                                      ? null
-                                      : () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) =>
-                                                  TrackJobScreen(
-                                                    taskTitle: title,
-                                                    userLocation:
-                                                        location.isNotEmpty
-                                                        ? location
-                                                        : 'Unknown location',
-                                                    jobId: jobId,
-                                                  ),
-                                            ),
-                                          );
-                                        },
-                                ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            // Quick track row — visible on the collapsed card for active jobs
+            if (isActive && jobId.isNotEmpty) ...[
+              Divider(height: 1, color: _line),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TrackJobScreen(
+                        taskTitle: title,
+                        userLocation: location.isNotEmpty
+                            ? location
+                            : 'Unknown location',
+                        jobId: jobId,
+                      ),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.map_outlined, size: 15, color: _accent),
+                        const SizedBox(width: 8),
+                        Text(
+                          "Track this job",
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _accent,
+                          ),
                         ),
+                        const Spacer(),
+                        Icon(Icons.arrow_forward_ios, size: 12, color: _muted),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
