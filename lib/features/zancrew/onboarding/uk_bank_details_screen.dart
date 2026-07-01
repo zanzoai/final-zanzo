@@ -108,7 +108,9 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
+        ),
       );
     }
   }
@@ -132,7 +134,7 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: _accent))
           : SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
@@ -315,7 +317,7 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
               child: Padding(
                 padding: EdgeInsets.only(top: 12),
                 child: Text(
-                  'I confirm these bank details are mine and correct.',
+                  'I confirm this bank account is in my name.',
                   style: TextStyle(
                     fontSize: 14,
                     color: _ink,
@@ -388,15 +390,25 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
           Icon(Icons.info_outline, size: 18, color: _accent),
           SizedBox(width: 10),
           Expanded(
-            child: Text(
-              'Your bank details are used to process your earnings. '
-              'These are stored securely and only seen by the Zanzo payments team.',
-              style: TextStyle(
-                fontSize: 13.5,
-                color: _ink,
-                fontWeight: FontWeight.w600,
-                height: 1.4,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your bank details are used to process your earnings. '
+                  'These are stored securely and only seen by the Zanzo payments team.',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: _ink,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'For secure payouts, your account holder name should match the full legal name used in your ZanCrew application. If it doesn\'t, payouts may be delayed while our team reviews it.',
+                  style: TextStyle(fontSize: 13, color: _ink, height: 1.4),
+                ),
+              ],
             ),
           ),
         ],
