@@ -31,9 +31,12 @@ class ZanCrewOnboarding extends StatefulWidget {
 }
 
 class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
-  // -----------------------------------------------
-  // CATALOG + STATE
-  // -----------------------------------------------
+  static const _bg = Color(0xFFFCFAF6);
+  static const _ink = Color(0xFF26211C);
+  static const _muted = Color(0xFF9B8B7E);
+  static const _accent = Color(0xFFD97706);
+  static const _border = Color(0xFFE8E2D9);
+
   static const List<String> _allBuckets = [
     'Delivery',
     'Cleaning',
@@ -70,9 +73,9 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
 
     if (phone == null || phone.isEmpty || userId == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please sign in first")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please sign in first')));
       Navigator.pop(context);
     }
   }
@@ -132,7 +135,7 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
   Future<void> _save() async {
     if (_selected.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pick at least one category")),
+        const SnackBar(content: Text('Pick at least one category')),
       );
       return;
     }
@@ -140,9 +143,10 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
     if (widget.editMode) {
       final ok = await _checkEditQuota();
       if (!ok) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("You can only change preferences twice per week."),
+            content: Text('You can only change preferences twice per week.'),
           ),
         );
         return;
@@ -154,9 +158,9 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('user_id');
-      if (userId == null) throw Exception("Not signed in");
+      if (userId == null) throw Exception('Not signed in');
 
-      final status = widget.editMode ? "active" : "pending";
+      final status = widget.editMode ? 'active' : 'pending';
 
       // Push to backend
       await ZanCrewApi.upsertProfile(
@@ -178,26 +182,23 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
 
       // Navigation
       if (widget.editMode) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Preferences updated.")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Preferences updated.')));
         Navigator.pop(context, true);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Preferences saved. Continue to right-to-work check.")),
-        );
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => const UkWorkStatusScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const UkWorkStatusScreen()),
         );
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Failed: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -208,87 +209,169 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    final title = widget.editMode
-        ? "Edit ZanCrew Preferences"
-        : "Join ZanCrew";
-    final cta = widget.editMode
-        ? "Save Changes"
-        : "Continue to Right to Work";
+    final isEdit = widget.editMode;
 
     return Scaffold(
+      backgroundColor: _bg,
       appBar: AppBar(
-        title: Text(title),
-        backgroundColor: Colors.orangeAccent,
+        backgroundColor: _bg,
+        foregroundColor: _ink,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: Text(
+          isEdit ? 'Edit Preferences' : 'Join ZanCrew',
+          style: const TextStyle(
+            color: _ink,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SafeArea(
         child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           children: [
-            Text(
-              widget.editMode
-                  ? "Update your choices"
-                  : "Pick what you’re great at and how far you’ll travel.",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 20),
+            if (!isEdit) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Choose how you can help',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: _ink,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Pick the services you're comfortable with and how far you're happy to travel.",
+                style: TextStyle(fontSize: 15, color: _muted, height: 1.4),
+              ),
+              const SizedBox(height: 28),
+            ] else ...[
+              const SizedBox(height: 12),
+            ],
 
             // ----- CATEGORY PICKER -----
             const Text(
-              "Your skills",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              'Your skills',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: _ink,
+              ),
             ),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: _allBuckets.map((b) {
-                final selected = _selected.contains(b);
+                final sel = _selected.contains(b);
                 return ChoiceChip(
                   label: Text(b),
-                  selected: selected,
+                  selected: sel,
+                  selectedColor: const Color(0xFFFEF3C7),
+                  backgroundColor: Colors.white,
+                  side: BorderSide(
+                    color: sel ? _accent : _border,
+                    width: sel ? 1.5 : 1.0,
+                  ),
+                  checkmarkColor: _accent,
+                  labelStyle: TextStyle(
+                    color: sel ? _accent : _ink,
+                    fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 13.5,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   onSelected: (_) {
                     setState(() {
-                      selected ? _selected.remove(b) : _selected.add(b);
+                      sel ? _selected.remove(b) : _selected.add(b);
                     });
                   },
                 );
               }).toList(),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
 
             // ----- RADIUS -----
-            const Text(
-              "Service radius (km)",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Service radius',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _ink,
+                  ),
+                ),
+                Text(
+                  '${_radius.round()} km',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _accent,
+                  ),
+                ),
+              ],
             ),
-            Slider(
-              min: 1,
-              max: 50,
-              divisions: 49,
-              label: "${_radius.round()} km",
-              value: _radius,
-              onChanged: (v) => setState(() => _radius = v),
-            ),
-
-            const SizedBox(height: 24),
-
-            ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+            const SizedBox(height: 4),
+            SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: _accent,
+                inactiveTrackColor: _border,
+                thumbColor: _accent,
+                overlayColor: const Color(0xFFD97706).withValues(alpha: 0.12),
+                trackHeight: 3,
               ),
-              child: _saving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(cta),
+              child: Slider(
+                min: 1,
+                max: 50,
+                divisions: 49,
+                label: '${_radius.round()} km',
+                value: _radius,
+                onChanged: (v) => setState(() => _radius = v),
+              ),
             ),
+
+            const SizedBox(height: 32),
+
+            SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  disabledBackgroundColor: _border,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : Text(
+                        isEdit ? 'Save Changes' : 'Continue to Right to Work',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15.5,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
