@@ -967,6 +967,45 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // SUPPORT
+  // ---------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> createSupportRequest(
+    String taskId, {
+    String? subject,
+    required String message,
+  }) async {
+    final body = <String, dynamic>{
+      'message': message,
+      if (subject != null && subject.isNotEmpty) 'subject': subject,
+    };
+    final res = await postJson('/support/tasks/$taskId', body);
+    if (res.statusCode == 201) {
+      return Map<String, dynamic>.from(jsonDecode(res.body));
+    }
+    throw HttpException(
+      'POST /support/tasks/$taskId failed: ${res.statusCode} ${_truncate(res.body)}',
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> getSupportRequestsForTask(
+    String taskId,
+  ) async {
+    final res = await getJson('/support/tasks/$taskId');
+    if (res.statusCode == 200) {
+      final decoded = jsonDecode(res.body);
+      if (decoded is List) {
+        return decoded
+            .map<Map<String, dynamic>>(
+              (e) => Map<String, dynamic>.from(e as Map),
+            )
+            .toList();
+      }
+    }
+    return [];
+  }
+
+  // ---------------------------------------------------------------------------
   // UPDATE EMAIL / PHONE
   // ---------------------------------------------------------------------------
 
