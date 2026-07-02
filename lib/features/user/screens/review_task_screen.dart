@@ -44,11 +44,15 @@ class WordLimitFormatter extends TextInputFormatter {
 class ReviewTaskScreen extends StatefulWidget {
   final String taskType;
   final Map<String, dynamic> taskDetail;
+  final double? initialLat;
+  final double? initialLng;
 
   const ReviewTaskScreen({
     super.key,
     required this.taskType,
     required this.taskDetail,
+    this.initialLat,
+    this.initialLng,
   });
 
   @override
@@ -156,10 +160,17 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
 
     _durationHours = 0.5;
 
+    // Seed coordinates passed from HomeScreen (GPS position captured before processTask call).
+    // These are the authoritative coordinates for this task; LocationSelector.onSelected
+    // will overwrite them if the user explicitly changes the address.
+    _selectedLat = widget.initialLat;
+    _selectedLng = widget.initialLng;
+
     _fetchEstimatedCost();
 
     // ========================= AUTO LOCATION PREFILL (GPS) =========================
-    if (_locationController.text.trim().isEmpty) {
+    // Only activate when both the address field AND the seeded coordinates are absent.
+    if (_locationController.text.trim().isEmpty && _selectedLat == null) {
       Future.microtask(() {
         Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best)
             .then((pos) async {
@@ -750,26 +761,22 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       }
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final lat = prefs.getDouble('review_lat');
-    final lng = prefs.getDouble('review_lng');
-
-    if (lat == null || lng == null) {
-      print(
-        '🔴 [Stripe] lat/lng missing from prefs — blocking payment (lat=$lat lng=$lng)',
-      );
+    if (_selectedLat == null || _selectedLng == null) {
+      print('🔴 [Stripe] lat/lng missing from state — blocking payment');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please confirm your location from GPS or Google suggestions.',
+            'Please select or confirm your task location before continuing.',
           ),
         ),
       );
       return;
     }
 
-    print('🔷 [Stripe] lat/lng OK — starting Stripe flow');
+    print(
+      '🔷 [Stripe] lat/lng OK (lat=$_selectedLat lng=$_selectedLng) — starting Stripe flow',
+    );
     await _startStripeFlow();
   }
 

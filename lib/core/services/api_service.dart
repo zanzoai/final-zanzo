@@ -1006,6 +1006,23 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // CUSTOMER ACTIVE TASK
+  // ---------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>?> getCustomerActiveTask() async {
+    try {
+      final res = await getJson('/tasks/active');
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
   // UPDATE EMAIL / PHONE
   // ---------------------------------------------------------------------------
 
