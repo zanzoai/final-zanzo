@@ -23,6 +23,7 @@ import 'package:zanzo_frontend/core/services/zancrew_api.dart';
 // User feature
 import 'package:zanzo_frontend/features/user/screens/profile_screen.dart';
 import 'package:zanzo_frontend/features/user/screens/review_task_screen.dart';
+import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
 import 'package:zanzo_frontend/features/user/widgets/login_prompt_dialog.dart';
 // ZanCrew
 import 'package:zanzo_frontend/features/zancrew/gateway/zancrew_gateway.dart';
@@ -90,6 +91,17 @@ class _HomeScreenState extends State<HomeScreen>
   // Fires once per fresh app process — resets on cold restart automatically
   // because it is a static field in memory (not persisted to disk).
   static bool _didAutoOpenActiveJobThisSession = false;
+
+  // ---------------------------------------------------------------------------
+  // CUSTOMER ACTIVE TASK STATE
+  // ---------------------------------------------------------------------------
+
+  String? _customerActiveTaskId;
+  String? _customerActiveTaskTitle;
+  String? _customerActiveTaskStatus;
+  String? _customerActiveTaskLocation;
+
+  static bool _didAutoOpenCustomerActiveTaskThisSession = false;
 
   // ---------------------------------------------------------------------------
   // ANIMATIONS (glow shadow around input box)
@@ -170,6 +182,7 @@ class _HomeScreenState extends State<HomeScreen>
     _loadZancrewFromPrefs();
     _backgroundSyncZanCrew();
     _checkActiveJob();
+    _checkCustomerActiveTask();
     _startTicker();
 
     // Sync UI with mic events
@@ -371,6 +384,68 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ---------------------------------------------------------------------------
+  // CUSTOMER ACTIVE TASK CHECK
+  // ---------------------------------------------------------------------------
+
+  Future<void> _checkCustomerActiveTask() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('user_id') ?? '';
+    if (userId.isEmpty) return;
+    try {
+      final data = await ApiService.getCustomerActiveTask();
+      if (!mounted) return;
+      if (data != null && data['active'] == true) {
+        final taskId = data['task_id']?.toString();
+        final taskTitle = data['title']?.toString();
+        final taskStatus = data['status']?.toString();
+        final taskLocation = data['location_address']?.toString();
+
+        setState(() {
+          _customerActiveTaskId = taskId;
+          _customerActiveTaskTitle = taskTitle;
+          _customerActiveTaskStatus = taskStatus;
+          _customerActiveTaskLocation = taskLocation;
+        });
+
+        const activeStatuses = {
+          'assigned',
+          'travelling',
+          'arrived',
+          'in_progress',
+        };
+        if (!_didAutoOpenCustomerActiveTaskThisSession &&
+            taskId != null &&
+            activeStatuses.contains(taskStatus)) {
+          _didAutoOpenCustomerActiveTaskThisSession = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!mounted) return;
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TrackJobScreen(
+                  taskTitle: taskTitle ?? 'Task',
+                  userLocation: taskLocation ?? '',
+                  jobId: taskId,
+                ),
+              ),
+            );
+            if (mounted) _checkCustomerActiveTask();
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _customerActiveTaskId = null;
+        _customerActiveTaskTitle = null;
+        _customerActiveTaskStatus = null;
+        _customerActiveTaskLocation = null;
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // VOICE TOGGLE
   // ---------------------------------------------------------------------------
 
@@ -558,6 +633,8 @@ class _HomeScreenState extends State<HomeScreen>
             builder: (_) => ReviewTaskScreen(
               taskType: data['task_type'] as String,
               taskDetail: Map<String, dynamic>.from(data['task_detail'] as Map),
+              initialLat: pos?.latitude,
+              initialLng: pos?.longitude,
             ),
           ),
         );
@@ -688,8 +765,6 @@ class _HomeScreenState extends State<HomeScreen>
     final t = ((screenH - 667.0) / 265.0).clamp(0.0, 1.0);
     final topPad = 48.0 + t * 12.0; // 48–60 — clears the Positioned overlay row
     final heroGap = 10.0 + t * 6.0; // 10–16 — compact so input stays central
-    // Leave room for the active job banner when visible; collapse when keyboard open.
-    final bottomPad = keyboardOpen ? 0.0 : (_activeJobId != null ? 96.0 : 16.0);
 
     // Hero is supportive — input card is the visual center.
     final heroFontSize = (22.0 + t * 6.0).clamp(22.0, 28.0);
@@ -1037,10 +1112,55 @@ class _HomeScreenState extends State<HomeScreen>
                         ), // Column
                       ), // Padding
                     ), // Expanded
-                    // ── Happening near you — bottom-anchored ──────────────
+                    // ── Customer active task card ─────────────────────────
+                    if (!isTyping &&
+                        !keyboardOpen &&
+                        _customerActiveTaskId != null) ...[
+                      const SizedBox(height: 10),
+                      _CustomerActiveTaskBanner(
+                        taskTitle: _customerActiveTaskTitle,
+                        rawStatus: _customerActiveTaskStatus,
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => TrackJobScreen(
+                                taskTitle: _customerActiveTaskTitle ?? 'Task',
+                                userLocation: _customerActiveTaskLocation ?? '',
+                                jobId: _customerActiveTaskId!,
+                              ),
+                            ),
+                          );
+                          if (mounted) _checkCustomerActiveTask();
+                        },
+                      ),
+                    ],
+                    // ── Active job card (crew) ─────────────────────────────
+                    if (!isTyping && !keyboardOpen && _activeJobId != null) ...[
+                      const SizedBox(height: 8),
+                      _ActiveJobBanner(
+                        taskTitle: _activeJobTitle,
+                        rawStatus: _activeJobStatus,
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  CrewJobDetail(jobId: _activeJobId!),
+                            ),
+                          );
+                          _checkActiveJob();
+                        },
+                      ),
+                    ],
+                    // ── Happening near you — hidden while any active card shows
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 220),
-                      child: isTyping || keyboardOpen
+                      child:
+                          isTyping ||
+                              keyboardOpen ||
+                              _customerActiveTaskId != null ||
+                              _activeJobId != null
                           ? const SizedBox.shrink()
                           : _HappeningCard(
                               key: const ValueKey('happening'),
@@ -1050,7 +1170,7 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                     ),
 
-                    SizedBox(height: bottomPad),
+                    const SizedBox(height: 16),
                   ], // Column children
                 ), // Column
                 // ── Customer / Work segmented pill (top-left) ─────────────
@@ -1156,28 +1276,6 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                   ),
                 ),
-
-                // ── Active job banner (bottom) — logic untouched ───────────
-                if (_activeJobId != null &&
-                    MediaQuery.of(context).viewInsets.bottom == 0)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: _ActiveJobBanner(
-                      taskTitle: _activeJobTitle,
-                      rawStatus: _activeJobStatus,
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CrewJobDetail(jobId: _activeJobId!),
-                          ),
-                        );
-                        _checkActiveJob();
-                      },
-                    ),
-                  ),
               ],
             ),
           ),
@@ -1481,108 +1579,277 @@ class _ActiveJobBanner extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
-          color: Colors.black,
+          color: const Color(0xFFFEFBF6),
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _kInk.withValues(alpha: 0.1)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        child: Row(
           children: [
-            // ROW 1: green dot + "On duty now" + status pill
-            Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF4ADE80),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'On duty now',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const Spacer(),
-                if (label.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
+            const _PulsingDot(color: Color(0xFF4ADE80)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'ON DUTY NOW',
+                    style: TextStyle(
+                      color: _kMuted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      label,
+                  ),
+                  if (hasTitle) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      taskTitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.1,
+                        color: _kInk,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
                       ),
                     ),
-                  ),
-              ],
+                  ],
+                  if (nextStep != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      nextStep,
+                      style: const TextStyle(
+                        color: _kMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-
-            // ROW 2: job title
-            if (hasTitle) ...[
-              const SizedBox(height: 5),
-              Text(
-                taskTitle!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            const SizedBox(width: 10),
+            if (label.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4ADE80).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF16A34A),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: _kSaffron,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Text(
+                'Return to job',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.75),
+                  color: Colors.white,
                   fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-
-            // ROW 3: next-step hint
-            if (nextStep != null) ...[
-              const SizedBox(height: 3),
-              Text(
-                nextStep,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-
-            // ROW 4: return CTA
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'Return →',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
                   fontWeight: FontWeight.w700,
-                  fontSize: 12.5,
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// CUSTOMER ACTIVE TASK BANNER — warm card shown when customer has active task
+// ===========================================================================
+
+class _CustomerActiveTaskBanner extends StatelessWidget {
+  final String? taskTitle;
+  final String? rawStatus;
+  final VoidCallback onTap;
+
+  const _CustomerActiveTaskBanner({
+    required this.taskTitle,
+    required this.rawStatus,
+    required this.onTap,
+  });
+
+  String get _statusText {
+    switch (rawStatus) {
+      case 'assigned':
+        return 'ZanCrew accepted your task';
+      case 'travelling':
+        return 'ZanCrew is travelling';
+      case 'arrived':
+        return 'ZanCrew has arrived';
+      case 'in_progress':
+        return 'Task in progress';
+      default:
+        return 'Active task';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTitle = taskTitle != null && taskTitle!.isNotEmpty;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBF3),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _kSaffron.withValues(alpha: 0.65),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.07),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+            BoxShadow(
+              color: _kSaffron.withValues(alpha: 0.10),
+              blurRadius: 24,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const _PulsingDot(color: _kSaffron),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'ACTIVE TASK',
+                    style: TextStyle(
+                      color: _kMuted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  if (hasTitle) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      taskTitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _kInk,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 2),
+                  Text(
+                    _statusText,
+                    style: const TextStyle(
+                      color: _kMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: _kSaffron,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Text(
+                'Track task',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// PULSING STATUS DOT — slow opacity + glow, no layout shift
+// ===========================================================================
+
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+
+  const _PulsingDot({required this.color});
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  )..repeat(reverse: true);
+
+  late final Animation<double> _anim = CurvedAnimation(
+    parent: _ctrl,
+    curve: Curves.easeInOut,
+  );
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: widget.color.withValues(alpha: 0.45 + _anim.value * 0.55),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: widget.color.withValues(alpha: _anim.value * 0.35),
+              blurRadius: 4 + _anim.value * 4,
+              spreadRadius: _anim.value,
             ),
           ],
         ),

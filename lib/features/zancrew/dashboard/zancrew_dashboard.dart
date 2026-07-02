@@ -89,6 +89,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // 🔔 FCM notification-opened subscription (background tap)
   StreamSubscription<RemoteMessage>? _fcmOpenedSub;
 
+  // 🔔 FCM foreground subscription (app in foreground when offer arrives)
+  StreamSubscription<RemoteMessage>? _fcmForegroundSub;
+
+  // ⏱ Offer polling fallback (6 s while online + on Offers tab — silent)
+  Timer? _offersTimer;
+
   // ---------------------------------------------------------------------------
   // Warm Zanzo palette
   // ---------------------------------------------------------------------------
@@ -146,6 +152,14 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         }
       }
     });
+
+    // Foreground FCM: new_offer arrives while the app is open — silent refresh
+    _fcmForegroundSub = FirebaseMessaging.onMessage.listen((message) {
+      if (message.data['type'] == 'new_offer' && _online && mounted) {
+        debugPrint('[FCM] foreground new_offer — refreshing offers');
+        _refreshOffers(status: 'offered', showLoading: false);
+      }
+    }, onError: (e) => debugPrint('[FCM] onMessage error: $e'));
   }
 
   // ---------------------------------------------------------------------------
@@ -381,6 +395,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       _startLocationUpdates();
       _refreshOffers(status: _currentTab);
       _connectOffersWs();
+      _startOfferPolling();
     } else {
       // Still refresh earnings even if offline, so earnings card is always current
       _recalculateTodayEarningsFromOffers(_currentTab);
@@ -605,9 +620,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       _startLocationUpdates();
       _refreshOffers(status: _currentTab);
       _connectOffersWs();
+      _startOfferPolling();
     } else {
       _locationTimer?.cancel();
       _disconnectOffersWs();
+      _stopOfferPolling();
     }
 
     if (!mounted) return;
@@ -622,9 +639,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   void _connectOffersWs() {
     _wsOffers?.dispose();
     final svc = CrewOffersWsService();
-    svc.onOfferReceived = (_) => _refreshOffers(status: 'offered');
-    svc.onOfferExpired = (_) => _refreshOffers(status: _currentTab);
-    svc.onTaskCancelled = (_) => _refreshOffers(status: _currentTab);
+    svc.onOfferReceived = (_) =>
+        _refreshOffers(status: 'offered', showLoading: false);
+    svc.onOfferExpired = (_) =>
+        _refreshOffers(status: _currentTab, showLoading: false);
+    svc.onTaskCancelled = (_) =>
+        _refreshOffers(status: _currentTab, showLoading: false);
     svc.connect();
     _wsOffers = svc;
   }
@@ -635,13 +655,30 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   }
 
   // ---------------------------------------------------------------------------
+  // OFFER POLLING (fallback — fires every 4 s while online + on Offers tab)
+  // ---------------------------------------------------------------------------
+  void _startOfferPolling() {
+    _offersTimer?.cancel();
+    _offersTimer = Timer.periodic(const Duration(seconds: 6), (_) {
+      if (_online && _currentTab == 'offered' && mounted) {
+        _refreshOffers(status: 'offered', showLoading: false);
+      }
+    });
+  }
+
+  void _stopOfferPolling() {
+    _offersTimer?.cancel();
+    _offersTimer = null;
+  }
+
+  // ---------------------------------------------------------------------------
   // LOAD OFFERS / JOBS FOR CURRENT TAB
   // ---------------------------------------------------------------------------
-  Future<void> _refreshOffers({String? status}) async {
+  Future<void> _refreshOffers({String? status, bool showLoading = true}) async {
     if (_crewUserId == null) return;
 
     final effStatus = status ?? _currentTab;
-    setState(() => _offersLoading = true);
+    if (showLoading) setState(() => _offersLoading = true);
 
     try {
       final list = await ApiService.fetchCrewOffers(
@@ -663,7 +700,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         ),
       );
     } finally {
-      if (mounted) setState(() => _offersLoading = false);
+      if (showLoading && mounted) setState(() => _offersLoading = false);
     }
   }
 
@@ -703,10 +740,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _locationTimer?.cancel();
+    _offersTimer?.cancel();
     _earningsChannel?.unsubscribe();
     _jobEventsChannel?.unsubscribe();
     _fcmRefreshSub?.cancel();
     _fcmOpenedSub?.cancel();
+    _fcmForegroundSub?.cancel();
     _wsOffers?.dispose();
     super.dispose();
   }
@@ -1294,6 +1333,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
               if (next != _currentTab) {
                 setState(() => _currentTab = next);
                 _refreshOffers(status: next);
+                if (next == 'offered') {
+                  _startOfferPolling();
+                } else {
+                  _stopOfferPolling();
+                }
               }
             },
             labelColor: _ink,
