@@ -516,6 +516,7 @@ class _HomeScreenState extends State<HomeScreen>
     // Require login before hitting any authenticated endpoint.
     final signedIn = await Auth.requireSignIn(context);
     if (!signedIn || !mounted) return;
+    await _loadUser(); // keep greeting / avatar in sync after first login
 
     setState(() {
       _isLoading = true;
@@ -661,7 +662,9 @@ class _HomeScreenState extends State<HomeScreen>
   // ---------------------------------------------------------------------------
 
   Future<void> _onAvatarTap() async {
-    if (_userName == null || _userPhone == null) {
+    // Only require login when no phone is stored — a signed-in user with no
+    // name yet should still reach ProfileScreen, not see the login dialog.
+    if (_userPhone == null) {
       final ok = await showLoginPrompt(context);
       if (!ok) return;
       await _loadUser();
@@ -677,7 +680,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   String get _avatarInitial {
     final n = _userName?.trim();
-    if (n == null || n.isEmpty) return 'Y';
+    if (n == null || n.isEmpty) return '?';
     return n[0].toUpperCase();
   }
 
@@ -736,6 +739,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
       final ok = await showLoginPrompt(context);
       if (!ok) return;
+      await _loadUser(); // sync name/phone into state after login
     }
 
     if (!mounted) return;
@@ -829,7 +833,9 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      "Tell Zanzo what you need — we'll turn it into action.",
+                      (_userName != null && _userName!.trim().isNotEmpty)
+                          ? 'Hi ${_userName!.trim().split(' ').first} — tell us what you need.'
+                          : "Tell Zanzo what you need — we'll turn it into action.",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: subtitleFontSize,

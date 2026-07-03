@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Core services
+import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/services/auth.dart';
 import 'package:zanzo_frontend/core/services/uk_provider_api.dart';
 import 'package:zanzo_frontend/core/services/zancrew_api.dart';
@@ -97,6 +98,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       } catch (_) {}
     }
+
+    // Refresh name/email from backend on every profile load.
+    // Errors are swallowed — local prefs remain as fallback.
+    try {
+      final me = await ApiService.getMe();
+      if (me != null) {
+        final backendName = (me['full_name'] as String?)?.trim();
+        final backendEmail = (me['email'] as String?)?.trim();
+        if (backendName != null && backendName.isNotEmpty) {
+          await prefs.setString('user_name', backendName);
+        }
+        if (backendEmail != null && backendEmail.isNotEmpty) {
+          await prefs.setString('user_email', backendEmail);
+        }
+      }
+    } catch (_) {}
 
     setState(() {
       _name = prefs.getString('user_name');
@@ -327,7 +344,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: Icons.phone_outlined,
               label: 'Phone',
               value: _formatPhone(_phone),
-              action: 'Change',
+              action: 'Update',
               onTap: () async {
                 final newPhone = await showChangePhoneDialog(
                   context,
@@ -359,7 +376,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   context,
                   current: _email,
                 );
-                if (result == true) setState(() {});
+                if (result == true) {
+                  setState(() {
+                    _email = prefs.getString('user_email');
+                  });
+                }
               },
             ),
           ],
