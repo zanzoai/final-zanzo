@@ -929,6 +929,29 @@ class ApiService {
     }
   }
 
+  // PATCH /auth/me with an arbitrary body map (requires Bearer token).
+  // Accepts any subset of { name, full_name, fullName, email, password }.
+  // Returns the updated UserRead dict on success, null on failure.
+  static Future<Map<String, dynamic>?> patchProfile(
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final res = await callWithRefresh(
+        (h) => httpClient
+            .patch(_u('/auth/me'), headers: h, body: jsonEncode(body))
+            .timeout(const Duration(seconds: 12)),
+      );
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      _log('patchProfile', '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}');
+      return null;
+    } catch (e) {
+      _log('patchProfile', '❌ error: $e');
+      return null;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // GENERIC (POST JSON / GET JSON)
   // ---------------------------------------------------------------------------
@@ -1027,21 +1050,13 @@ class ApiService {
   // ---------------------------------------------------------------------------
 
   static Future<bool> updateEmail(String email) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
-    if (token == null || token.isEmpty) return false;
-
-    final res = await httpClient.post(
-      Uri.parse('$baseUrl/auth/set-email'),
-      headers: {...jsonHeaders, 'Authorization': 'Bearer $token'},
-      body: jsonEncode({'email': email.trim()}),
-    );
-
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      await prefs.setString('user_email', email.trim());
+    final trimmed = email.trim();
+    final profile = await patchProfile({'email': trimmed});
+    if (profile != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_email', trimmed);
       return true;
     }
-
     return false;
   }
 
