@@ -709,7 +709,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () {},
+                onTap: () => Navigator.pushNamed(context, '/settings'),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 18,
@@ -717,11 +717,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.settings_outlined, color: _muted, size: 22),
+                      Icon(Icons.shield_outlined, color: _muted, size: 22),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          "Settings",
+                          "Legal & Safety",
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,

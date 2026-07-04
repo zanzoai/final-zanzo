@@ -24,6 +24,8 @@ const _kMuted = Color(0xFF8C8378);
 const _kBg = Color(0xFFFCFAF6);
 const _kLine = Color(0xFFE8E2D9);
 
+const _footerStyle = TextStyle(fontSize: 11.5, color: _kMuted, height: 1.5);
+
 /// Opens the login dialog. Returns true when the session is fully established.
 Future<bool> showLoginPrompt(BuildContext context) async {
   return await showDialog<bool>(
@@ -399,7 +401,46 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
                 ),
               ],
             ),
+
+            // Legal consent footer — shown on phone step only
+            if (_step == _Step.phone) ...[
+              const SizedBox(height: 16),
+              _buildLegalFooter(),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegalFooter() {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        const Text('By continuing, you agree to our ', style: _footerStyle),
+        _legalTap('Terms', '/terms'),
+        const Text(', ', style: _footerStyle),
+        _legalTap('Privacy Policy', '/privacy'),
+        const Text(' and ', style: _footerStyle),
+        _legalTap('Task Rules', '/task_rules'),
+        const Text('.', style: _footerStyle),
+      ],
+    );
+  }
+
+  Widget _legalTap(String label, String route) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, route),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11.5,
+          color: _kSaffron,
+          height: 1.5,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.underline,
+          decorationColor: _kSaffron,
         ),
       ),
     );
