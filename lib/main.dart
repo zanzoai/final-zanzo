@@ -6,6 +6,10 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'features/common/home/home_screen.dart';
+import 'features/legal/privacy_screen.dart';
+import 'features/legal/settings_screen.dart';
+import 'features/legal/task_rules_screen.dart';
+import 'features/legal/terms_screen.dart';
 import 'features/user/screens/job_history_screen.dart';
 import 'features/user/screens/profile_screen.dart';
 
@@ -70,6 +74,10 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/profile': (context) => const ProfileScreen(),
         '/history': (context) => const JobHistoryScreen(),
+        '/settings': (context) => const SettingsScreen(),
+        '/terms': (context) => const TermsScreen(),
+        '/privacy': (context) => const PrivacyScreen(),
+        '/task_rules': (context) => const TaskRulesScreen(),
       },
     );
   }
