@@ -10,6 +10,7 @@ import 'features/legal/privacy_screen.dart';
 import 'features/legal/settings_screen.dart';
 import 'features/legal/task_rules_screen.dart';
 import 'features/legal/terms_screen.dart';
+import 'features/user/screens/account_data_screen.dart';
 import 'features/user/screens/job_history_screen.dart';
 import 'features/user/screens/profile_screen.dart';
 
@@ -78,6 +79,7 @@ class MyApp extends StatelessWidget {
         '/terms': (context) => const TermsScreen(),
         '/privacy': (context) => const PrivacyScreen(),
         '/task_rules': (context) => const TaskRulesScreen(),
+        '/account_data': (_) => const AccountDataScreen(),
       },
     );
   }

@@ -735,6 +735,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
+            Divider(height: 1, color: _line),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => Navigator.pushNamed(context, '/account_data'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.manage_accounts_outlined,
+                        color: _muted,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "Account & Data",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _ink,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: _muted),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
