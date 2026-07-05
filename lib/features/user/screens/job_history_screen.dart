@@ -86,37 +86,36 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
     final s = raw.toLowerCase();
     switch (s) {
       case 'payment_pending':
-        return "Payment Pending";
+        return 'Payment Pending';
       case 'searching':
       case 'finding_agent':
-        return "Finding Agent";
+        return 'Finding Agent';
       case 'assigned':
-        return "Agent Assigned";
+        return 'Agent Assigned';
       case 'travelling':
       case 'traveling':
       case 'en_route':
-        return "On the Way";
+        return 'On the Way';
       case 'arrived':
-        return "Arrived";
+        return 'Arrived';
       case 'in_progress':
       case 'started':
-        return "In Progress";
+        return 'In Progress';
       case 'completed':
       case 'settled':
-        return "Completed";
+        return 'Completed';
       case 'paid':
-        return "Paid";
+        return 'Paid';
       case 'cancelled':
       case 'canceled':
-        return "Cancelled";
+        return 'Cancelled';
       default:
-        return raw.isEmpty ? "Unknown" : raw;
+        return raw.isEmpty ? 'Unknown' : raw;
     }
   }
 
   ({Color bg, Color border, Color text}) _statusColors(String raw) {
     final s = raw.toLowerCase();
-
     if (s == 'completed' || s == 'settled' || s == 'paid') {
       return (
         bg: const Color(0xFFE8F5E9),
@@ -124,7 +123,6 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
         text: const Color(0xFF2E7D32),
       );
     }
-
     if (s == 'cancelled' || s == 'canceled') {
       return (
         bg: const Color(0xFFFFEBEE),
@@ -132,15 +130,9 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
         text: const Color(0xFFC62828),
       );
     }
-
     if (s == 'payment_pending') {
-      return (
-        bg: const Color(0xFFFFF3E9),
-        border: _warning,
-        text: _accent,
-      );
+      return (bg: const Color(0xFFFFF3E9), border: _warning, text: _accent);
     }
-
     if (s == 'searching' ||
         s == 'finding_agent' ||
         s == 'assigned' ||
@@ -156,47 +148,10 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
         text: const Color(0xFFEF6C00),
       );
     }
-
     return (
       bg: const Color(0xFFF5F5F5),
       border: const Color(0xFFBDBDBD),
       text: const Color(0xFF616161),
-    );
-  }
-
-  Widget _pill(String text, {required String rawStatus}) {
-    final c = _statusColors(rawStatus);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: c.bg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: c.border),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: c.text,
-        ),
-      ),
-    );
-  }
-
-  Widget _kvRow({required String icon, required String text}) {
-    if (text.trim().isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Text(icon),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(text, style: TextStyle(color: _ink)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -210,13 +165,65 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
       ),
       child: Text(
         label,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: _ink,
         ),
       ),
     );
+  }
+
+  Widget _detailRow(String label, String value) {
+    if (value.trim().isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 82,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: _muted,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: _ink,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _paymentStatusLabel(String raw) {
+    switch (raw.toLowerCase()) {
+      case 'captured':
+      case 'success':
+      case 'succeeded':
+        return 'Paid';
+      case 'refunded':
+        return 'Refunded';
+      case 'released':
+        return 'Auth released';
+      case 'authorized':
+        return 'Authorised';
+      case 'failed':
+        return 'Payment failed';
+      default:
+        return '';
+    }
   }
 
   bool _isCompletedStatus(String status) {
@@ -238,7 +245,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
       backgroundColor: _bg,
       appBar: AppBar(
         title: const Text(
-          "My Job History",
+          'My Orders',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
         backgroundColor: _bg,
@@ -290,7 +297,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              "No orders yet",
+              'No orders yet',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
@@ -299,7 +306,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              "Your completed orders will appear here.",
+              'Your completed orders will appear here.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: _muted),
             ),
@@ -312,7 +319,6 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
   Widget _jobCard(BuildContext context, Map<String, dynamic> job) {
     final jobId = _safeStr(job['id']);
     final backendConcise = _safeStr(job['concise_title']);
-
     final title = backendConcise.isNotEmpty
         ? backendConcise
         : _safeStr(
@@ -329,21 +335,25 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
     final status = _statusLabel(statusRaw);
 
     final description = _safeStr(job['polished_task']);
-
-    final notesAny = job['notes'];
-    final notesList = _safeStrList(notesAny);
-    final notesText = (notesAny is String) ? notesAny.trim() : '';
-
-    final actions = _safeStrList(job['actions']);
     final tags = _safeStrList(job['tags']);
 
     final scheduled = _fmtDate(job['scheduled_at']);
     final completed = _fmtDate(job['completed_at']);
-    final paidAt = _fmtDate(job['paid_at']);
 
-    final duration = _safeStr(job['duration_hours']);
-    final people = _safeStr(job['people_required']);
+    // Duration — format as "1 hour" / "2 hours"
+    final durationHours = job['duration_hours'];
+    final durationLabel = (durationHours is num && durationHours > 0)
+        ? '${durationHours == durationHours.truncateToDouble() ? durationHours.toInt() : durationHours}'
+              ' ${durationHours == 1 ? "hour" : "hours"}'
+        : '';
 
+    // People — format as "1 person" / "2 people"
+    final peopleCount = job['people_required'];
+    final peopleLabel = (peopleCount is num && peopleCount > 0)
+        ? '${peopleCount.toInt()} ${peopleCount.toInt() == 1 ? "person" : "people"}'
+        : '';
+
+    // Amount
     final amount = job['estimated_amount'];
     final currency = _safeStr(job['currency'], 'GBP').toUpperCase();
     final symbol = currency == 'GBP'
@@ -354,8 +364,14 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
     final cost = (amount is num)
         ? amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2)
         : '';
+    final amountDisplay = cost.isNotEmpty ? '$symbol$cost' : '';
+
+    // Payment status (available after backend schema update)
+    final payStatusLabel =
+        _paymentStatusLabel(_safeStr(job['payment_status']));
 
     final isActive = !_isCompletedStatus(statusRaw);
+    final pillColors = _statusColors(statusRaw);
 
     return Container(
       decoration: BoxDecoration(
@@ -382,213 +398,232 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
               child: ExpansionTile(
                 backgroundColor: _card,
                 collapsedBackgroundColor: _card,
-                tilePadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
-                childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                title: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: FontWeight.w700, color: _ink),
-                ),
-                subtitle: Text(
-                  [
-                    if (created.isNotEmpty) created,
-                    if (location.isNotEmpty && location != 'Unknown address')
-                      location,
-                  ].join(' • '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: _muted, fontSize: 12),
-                ),
-                trailing: _pill(status, rawStatus: statusRaw),
-                children: [
-                  if (description.isNotEmpty) ...[
-                    Text(
-                      "Requirements",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: _ink,
+                tilePadding: const EdgeInsets.fromLTRB(14, 10, 10, 8),
+                childrenPadding: EdgeInsets.zero,
+                // ── Collapsed: title (left) + amount (right) ──────────────
+                title: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: _ink,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      description,
-                      style: TextStyle(height: 1.35, color: _ink),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (notesList.isNotEmpty || notesText.isNotEmpty) ...[
-                    Text(
-                      "Important Notes",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: _ink,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    if (notesList.isNotEmpty)
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: notesList.map(_warmChip).toList(),
-                      )
-                    else
+                    if (amountDisplay.isNotEmpty) ...[
+                      const SizedBox(width: 10),
                       Text(
-                        notesText,
-                        style: TextStyle(height: 1.35, color: _ink),
+                        amountDisplay,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: _ink,
+                        ),
                       ),
-                    const SizedBox(height: 12),
+                    ],
                   ],
-                  if (actions.isNotEmpty) ...[
-                    Text(
-                      "Expected Actions",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: _ink,
+                ),
+                // ── Subtitle: status pill + date, then address ────────────
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 6, bottom: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: pillColors.bg,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: pillColors.border),
+                            ),
+                            child: Text(
+                              status,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: pillColors.text,
+                              ),
+                            ),
+                          ),
+                          if (created.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                created,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: _muted,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Column(
+                      if (location.isNotEmpty &&
+                          location != 'Unknown address') ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          location,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: _muted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // ── Expanded area ─────────────────────────────────────────
+                children: [
+                  const Divider(height: 1, color: _line),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: actions
-                          .map(
-                            (a) => Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text("•  ", style: TextStyle(color: _ink)),
-                                  Expanded(
-                                    child: Text(
-                                      a,
-                                      style: TextStyle(
-                                        height: 1.35,
-                                        color: _ink,
-                                      ),
+                      children: [
+                        // Task summary
+                        if (description.isNotEmpty) ...[
+                          Text(
+                            description,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              color: _ink,
+                              height: 1.5,
+                            ),
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+                        // Section label
+                        const Text(
+                          'ORDER DETAILS',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: _muted,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Detail rows
+                        _detailRow('Location', location),
+                        _detailRow('Ordered', created),
+                        if (scheduled.isNotEmpty)
+                          _detailRow('Scheduled', scheduled),
+                        if (completed.isNotEmpty)
+                          _detailRow('Completed', completed),
+                        _detailRow('Duration', durationLabel),
+                        _detailRow('People', peopleLabel),
+                        if (amountDisplay.isNotEmpty)
+                          _detailRow('Amount', amountDisplay),
+                        if (payStatusLabel.isNotEmpty)
+                          _detailRow('Payment', payStatusLabel),
+                        // Tags — subtle chips, no heading
+                        if (tags.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: tags.map(_warmChip).toList(),
+                          ),
+                        ],
+                        // Action button — full width
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 46,
+                          child: _isCompletedStatus(statusRaw)
+                              ? FilledButton.icon(
+                                  icon: const Icon(
+                                    Icons.replay_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Order again'),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: _success,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (tags.isNotEmpty) ...[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: tags.map(_warmChip).toList(),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  _kvRow(icon: '📍', text: location),
-                  _kvRow(
-                    icon: '🕒',
-                    text: created.isNotEmpty ? 'Ordered: $created' : '',
-                  ),
-                  _kvRow(
-                    icon: '🗓️',
-                    text: scheduled.isNotEmpty ? 'Scheduled: $scheduled' : '',
-                  ),
-                  _kvRow(
-                    icon: '✅',
-                    text: completed.isNotEmpty ? 'Completed: $completed' : '',
-                  ),
-                  _kvRow(
-                    icon: '💳',
-                    text: paidAt.isNotEmpty ? 'Paid at: $paidAt' : '',
-                  ),
-                  _kvRow(
-                    icon: '⏱️',
-                    text: duration.isNotEmpty
-                        ? 'Duration: $duration hours'
-                        : '',
-                  ),
-                  _kvRow(
-                    icon: '👥',
-                    text: people.isNotEmpty ? 'People Required: $people' : '',
-                  ),
-                  _kvRow(
-                    icon: '💰',
-                    text: cost.isNotEmpty ? 'Estimated: $symbol$cost' : '',
-                  ),
-                  const SizedBox(height: 14),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: _isCompletedStatus(statusRaw)
-                        ? ElevatedButton.icon(
-                            icon: const Icon(Icons.refresh),
-                            label: const Text("Request Again"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _success,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: () {
-                              final prefill = Map<String, dynamic>.from(job);
-
-                              final anyNotes = prefill['notes'];
-                              if (anyNotes is String) {
-                                final chips = anyNotes
-                                    .split(RegExp(r'\s*,\s*'))
-                                    .map((e) => e.trim())
-                                    .where((e) => e.isNotEmpty)
-                                    .toList();
-                                prefill['notes'] = chips;
-                              }
-
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ReviewTaskScreen(
-                                    taskType: title,
-                                    taskDetail: prefill,
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : ElevatedButton.icon(
-                            icon: const Icon(Icons.map_outlined),
-                            label: const Text("Track Job"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _accent,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: jobId.isEmpty
-                                ? null
-                                : () {
+                                  onPressed: () {
+                                    final prefill =
+                                        Map<String, dynamic>.from(job);
+                                    final anyNotes = prefill['notes'];
+                                    if (anyNotes is String) {
+                                      final chips = anyNotes
+                                          .split(RegExp(r'\s*,\s*'))
+                                          .map((e) => e.trim())
+                                          .where((e) => e.isNotEmpty)
+                                          .toList();
+                                      prefill['notes'] = chips;
+                                    }
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => TrackJobScreen(
-                                          taskTitle: title,
-                                          userLocation: location.isNotEmpty
-                                              ? location
-                                              : 'Unknown location',
-                                          jobId: jobId,
+                                        builder: (context) => ReviewTaskScreen(
+                                          taskType: title,
+                                          taskDetail: prefill,
                                         ),
                                       ),
                                     );
                                   },
-                          ),
+                                )
+                              : FilledButton.icon(
+                                  icon: const Icon(
+                                    Icons.map_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Track this job'),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: _accent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  onPressed: jobId.isEmpty
+                                      ? null
+                                      : () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  TrackJobScreen(
+                                                taskTitle: title,
+                                                userLocation:
+                                                    location.isNotEmpty
+                                                        ? location
+                                                        : 'Unknown location',
+                                                jobId: jobId,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            // Quick track row — visible on the collapsed card for active jobs
+            // Quick track row — visible on collapsed card for active jobs
             if (isActive && jobId.isNotEmpty) ...[
               Divider(height: 1, color: _line),
               Material(
@@ -616,7 +651,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
                         Icon(Icons.map_outlined, size: 15, color: _accent),
                         const SizedBox(width: 8),
                         Text(
-                          "Track this job",
+                          'Track this job',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -624,7 +659,11 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
                           ),
                         ),
                         const Spacer(),
-                        Icon(Icons.arrow_forward_ios, size: 12, color: _muted),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 12,
+                          color: _muted,
+                        ),
                       ],
                     ),
                   ),
