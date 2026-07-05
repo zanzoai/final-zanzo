@@ -1246,6 +1246,55 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // PRIVACY REQUESTS
+  // ---------------------------------------------------------------------------
+
+  // POST /auth/privacy-request  →  { request_type, reason? }
+  // Returns { statusCode, ok, message }.
+  // 202 = accepted; 409 = conflict (active task or duplicate); 0 = network error.
+  static Future<Map<String, dynamic>> requestPrivacy(
+    String requestType, {
+    String? reason,
+  }) async {
+    final body = <String, dynamic>{'request_type': requestType};
+    if (reason != null && reason.isNotEmpty) body['reason'] = reason;
+
+    try {
+      final res = await callWithRefresh(
+        (h) => _post(_u('/auth/privacy-request'), body, headers: h),
+      );
+      String message = '';
+      try {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map) {
+          message =
+              decoded['message']?.toString() ??
+              decoded['detail']?.toString() ??
+              '';
+        }
+      } catch (_) {}
+      _log(
+        'requestPrivacy',
+        '${res.statusCode == 202 ? '✅' : '❌'} ${res.statusCode} $message',
+      );
+      return {
+        'statusCode': res.statusCode,
+        'ok': res.statusCode == 202,
+        'message': message,
+      };
+    } on TimeoutException {
+      _log('requestPrivacy', '❌ timeout');
+      return {'statusCode': 0, 'ok': false, 'message': ''};
+    } on SocketException catch (e) {
+      _log('requestPrivacy', '❌ socket: $e');
+      return {'statusCode': 0, 'ok': false, 'message': ''};
+    } catch (e) {
+      _log('requestPrivacy', '❌ error: $e');
+      return {'statusCode': 0, 'ok': false, 'message': ''};
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // UTILS
   // ---------------------------------------------------------------------------
 
