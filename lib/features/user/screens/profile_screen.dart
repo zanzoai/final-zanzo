@@ -709,6 +709,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Material(
               color: Colors.transparent,
               child: InkWell(
+                onTap: () => Navigator.pushNamed(context, '/cancelled_refunds'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.receipt_long_outlined,
+                        color: _muted,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Cancelled & Refunds',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _ink,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: _muted),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Divider(height: 1, color: _line),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
                 onTap: () => Navigator.pushNamed(context, '/settings'),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
