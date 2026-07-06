@@ -362,38 +362,102 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
           context: context,
           builder: (ctx) => StatefulBuilder(
             builder: (ctx, setLocalState) {
+              final typed = controller.text;
               return AlertDialog(
                 backgroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                 ),
+                titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
                 title: const Text(
                   'Confirm start',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
                 ),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       'Ask the customer for their 4-digit Start PIN.',
-                      style: TextStyle(color: _muted),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: controller,
-                      decoration: InputDecoration(
-                        hintText: 'Enter 4-digit PIN',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        fillColor: _surface,
-                        filled: true,
-                        errorText: errorText,
+                      style: TextStyle(
+                        color: _muted,
+                        fontSize: 14,
+                        height: 1.4,
                       ),
-                      keyboardType: TextInputType.number,
-                      maxLength: 4,
-                      textAlign: TextAlign.center,
                     ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      height: 60,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Opacity(
+                              opacity: 0,
+                              child: TextField(
+                                controller: controller,
+                                keyboardType: TextInputType.number,
+                                maxLength: 4,
+                                autofocus: true,
+                                decoration: const InputDecoration(
+                                  counterText: '',
+                                ),
+                                onChanged: (_) => setLocalState(() {}),
+                              ),
+                            ),
+                          ),
+                          IgnorePointer(
+                            child: Row(
+                              children: List.generate(4, (i) {
+                                final char = i < typed.length ? typed[i] : '';
+                                final isActive =
+                                    typed.length < 4 && i == typed.length;
+                                return Expanded(
+                                  child: Container(
+                                    margin: EdgeInsets.only(
+                                      left: i == 0 ? 0 : 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isActive
+                                            ? _accent
+                                            : char.isNotEmpty
+                                            ? _ink.withValues(alpha: 0.3)
+                                            : _border,
+                                        width: isActive ? 2.0 : 1.0,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        char,
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w700,
+                                          color: _ink,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        errorText!,
+                        style: TextStyle(
+                          color: Colors.red[700],
+                          fontSize: 12.5,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 actions: [
@@ -409,8 +473,9 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () =>
-                        Navigator.of(ctx).pop(controller.text.trim()),
+                    onPressed: typed.length == 4
+                        ? () => Navigator.of(ctx).pop(controller.text)
+                        : null,
                     child: const Text('Verify'),
                   ),
                 ],
@@ -451,38 +516,102 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
           context: context,
           builder: (ctx) => StatefulBuilder(
             builder: (ctx, setLocalState) {
+              final typed = controller.text;
               return AlertDialog(
                 backgroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                 ),
+                titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
                 title: const Text(
                   'Confirm completion',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
                 ),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       'Ask the customer for their 4-digit End PIN.',
-                      style: TextStyle(color: _muted),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: controller,
-                      decoration: InputDecoration(
-                        hintText: 'Enter 4-digit PIN',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        fillColor: _surface,
-                        filled: true,
-                        errorText: errorText,
+                      style: TextStyle(
+                        color: _muted,
+                        fontSize: 14,
+                        height: 1.4,
                       ),
-                      keyboardType: TextInputType.number,
-                      maxLength: 4,
-                      textAlign: TextAlign.center,
                     ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      height: 60,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Opacity(
+                              opacity: 0,
+                              child: TextField(
+                                controller: controller,
+                                keyboardType: TextInputType.number,
+                                maxLength: 4,
+                                autofocus: true,
+                                decoration: const InputDecoration(
+                                  counterText: '',
+                                ),
+                                onChanged: (_) => setLocalState(() {}),
+                              ),
+                            ),
+                          ),
+                          IgnorePointer(
+                            child: Row(
+                              children: List.generate(4, (i) {
+                                final char = i < typed.length ? typed[i] : '';
+                                final isActive =
+                                    typed.length < 4 && i == typed.length;
+                                return Expanded(
+                                  child: Container(
+                                    margin: EdgeInsets.only(
+                                      left: i == 0 ? 0 : 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isActive
+                                            ? _accent
+                                            : char.isNotEmpty
+                                            ? _ink.withValues(alpha: 0.3)
+                                            : _border.withValues(alpha: 0.8),
+                                        width: isActive ? 2.0 : 1.0,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        char,
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w700,
+                                          color: _ink,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        errorText!,
+                        style: TextStyle(
+                          color: Colors.red[700],
+                          fontSize: 12.5,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 actions: [
@@ -498,8 +627,9 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () =>
-                        Navigator.of(ctx).pop(controller.text.trim()),
+                    onPressed: typed.length == 4
+                        ? () => Navigator.of(ctx).pop(controller.text)
+                        : null,
                     child: const Text('Verify'),
                   ),
                 ],
