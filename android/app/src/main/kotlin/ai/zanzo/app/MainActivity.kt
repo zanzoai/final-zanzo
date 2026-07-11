@@ -1,4 +1,4 @@
-package com.example.zanzo
+package ai.zanzo.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
