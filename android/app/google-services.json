@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:240378671893:android:cb793bb748acd592432f1c",
+        "android_client_info": {
+          "package_name": "ai.zanzo.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBSYiXvTYIvc8ai0zsBin2npLiPodDezcA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:240378671893:android:23b794d7870c3486432f1c",
         "android_client_info": {
           "package_name": "com.example.zanzo"

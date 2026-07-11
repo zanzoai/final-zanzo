@@ -1,0 +1,24 @@
+# Zanzo upload-keystore signing credentials
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file to android/key.properties and fill in all four fields.
+# android/key.properties is git-ignored and must NEVER be committed.
+#
+# Generate the upload keystore with:
+#   keytool -genkey -v \
+#     -keystore ~/keys/zanzo-upload.jks \
+#     -storetype JKS \
+#     -keyalg RSA -keysize 2048 -validity 10000 \
+#     -alias zanzo-upload \
+#     -dname "CN=Zanzo AI Ltd, OU=Mobile, O=Zanzo AI Ltd, L=London, ST=England, C=GB"
+#
+# Then set storeFile to the absolute path of that file, e.g.:
+#   storeFile=/Users/yosrith/keys/zanzo-upload.jks
+#
+# Back up the keystore and both passwords in a password manager immediately.
+# Loss of the upload keystore locks you out of future Play Store updates.
+# ─────────────────────────────────────────────────────────────────────────────
+
+storePassword=
+keyPassword=
+keyAlias=zanzo-upload
+storeFile=
