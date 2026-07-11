@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-
     <!-- Theme applied during dark mode app launch -->
     <style name="LaunchTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
-        <item name="android:statusBarColor" tools:targetApi="l">#000000</item>
+        <item name="android:statusBarColor" tools:targetApi="l">#FCFAF6</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
-
     <!-- Dark mode app theme -->
     <style name="NormalTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:colorPrimary">#FF9800</item>
@@ -14,5 +16,4 @@
         <item name="android:colorAccent">#FF9800</item>
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
-
 </resources>

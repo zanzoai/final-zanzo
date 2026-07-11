@@ -10,7 +10,7 @@ plugins {
 android {
     namespace = "com.example.zanzo"
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "29.0.14206865"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

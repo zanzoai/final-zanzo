@@ -30,10 +30,12 @@ import 'package:zanzo_frontend/features/zancrew/gateway/zancrew_gateway.dart';
 import 'package:zanzo_frontend/features/zancrew/screens/zancrew_JobDetails.dart';
 
 // Design tokens — scoped to this file
-const _kGround = Color(0xFFFCFAF6);
-const _kInk = Color(0xFF26211C);
-const _kSaffron = Color(0xFFD97706);
-const _kMuted = Color(0xFF8C8378);
+const _kGround = Color(0xFFFCFAF6); // cream — kept in sync with native splash
+const _kInk = Color(0xFF3B2A1E); // warm dark brown (was cold charcoal)
+const _kSaffron = Color(
+  0xFFE8720C,
+); // richer brand orange (was amber-leaning #D97706)
+const _kMuted = Color(0xFF8C7B6E); // warmer taupe (was neutral grey)
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -125,43 +127,49 @@ class _HomeScreenState extends State<HomeScreen>
     _Example(
       emoji: '📦',
       name: 'Emma',
-      text: 'Pick up my parcel from the post office and bring it to my flat.',
-    ),
-    _Example(
-      emoji: '🛒',
-      name: 'John',
-      text: 'Buy groceries from Tesco and deliver them to my address.',
+      text:
+          'Pick up my prepaid parcel from the post office and bring it to my flat.',
     ),
     _Example(
       emoji: '🛋️',
       name: 'Maya',
-      text: 'Wait at my flat for a sofa delivery and let the team in.',
-    ),
-    _Example(
-      emoji: '📦',
-      name: 'Oliver',
-      text: 'Help carry two heavy boxes up two flights of stairs.',
+      text: 'Wait at my flat for a sofa delivery and let the delivery team in.',
     ),
     _Example(
       emoji: '📄',
       name: 'Sophie',
-      text: 'Collect documents from a nearby office and drop them here.',
+      text:
+          'Collect documents from a nearby office and drop them at my address.',
     ),
     _Example(
       emoji: '🔑',
       name: 'Daniel',
       text:
-          'Key handover to a new tenant — verify ID and note the meter reading.',
+          'Hand spare keys to a new tenant arriving at 2 PM and note the meter reading.',
     ),
     _Example(
-      emoji: '📶',
-      name: 'Grace',
-      text: 'Wait for the broadband engineer (9–12 PM) and confirm it works.',
+      emoji: '🧹',
+      name: 'Yosh',
+      text:
+          'Wait at my property and hand a spare key to my cleaner arriving at 10 AM.',
     ),
     _Example(
-      emoji: '📸',
-      name: 'Noah',
-      text: 'Take 10 clear photos of my vacant flat for a property listing.',
+      emoji: '🎁',
+      name: 'James',
+      text:
+          'Drop two small bags of donations at the charity shop two streets away.',
+    ),
+    _Example(
+      emoji: '🏠',
+      name: 'Hira',
+      text:
+          'Wait at my flat for a broadband engineer between 2 and 4 PM and let them in.',
+    ),
+    _Example(
+      emoji: '🎒',
+      name: 'Leo',
+      text:
+          'Collect my forgotten backpack from a friend nearby and bring it to me.',
     ),
   ];
 
@@ -768,10 +776,11 @@ class _HomeScreenState extends State<HomeScreen>
     final screenH = MediaQuery.of(context).size.height;
     final t = ((screenH - 667.0) / 265.0).clamp(0.0, 1.0);
     final topPad = 48.0 + t * 12.0; // 48–60 — clears the Positioned overlay row
-    final heroGap = 10.0 + t * 6.0; // 10–16 — compact so input stays central
+    final heroGap =
+        20.0 + t * 4.0; // 20–24 — breathing room between wordmark and hero
 
     // Hero is supportive — input card is the visual center.
-    final heroFontSize = (22.0 + t * 6.0).clamp(22.0, 28.0);
+    final heroFontSize = (18.0 + t * 6.0).clamp(18.0, 24.0);
     final subtitleFontSize = (12.5 + t * 1.5).clamp(12.5, 14.0);
 
     return Scaffold(
@@ -799,16 +808,16 @@ class _HomeScreenState extends State<HomeScreen>
                         const Text(
                           'Zanzo',
                           style: TextStyle(
-                            fontSize: 25,
-                            fontWeight: FontWeight.w500,
-                            color: _kInk,
-                            letterSpacing: -0.3,
+                            fontSize: 30,
+                            fontWeight: FontWeight.w700,
+                            color: _kSaffron,
+                            letterSpacing: -0.5,
                           ),
                         ),
                         const SizedBox(height: 5),
                         Container(
-                          width: 28,
-                          height: 2.5,
+                          width: 18,
+                          height: 1.5,
                           decoration: BoxDecoration(
                             color: _kSaffron,
                             borderRadius: BorderRadius.circular(2),
@@ -820,18 +829,28 @@ class _HomeScreenState extends State<HomeScreen>
                     SizedBox(height: heroGap),
 
                     // ── Hero ──────────────────────────────────────────────
-                    Text(
-                      'Hire a human\nnear you',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: heroFontSize,
-                        fontWeight: FontWeight.w500,
-                        color: _kInk,
-                        height: 1.05,
-                        letterSpacing: -0.5,
+                    Text.rich(
+                      TextSpan(
+                        style: TextStyle(
+                          fontSize: heroFontSize,
+                          fontWeight: FontWeight.w600,
+                          height: 1.0,
+                          letterSpacing: -0.5,
+                        ),
+                        children: const [
+                          TextSpan(
+                            text: 'Hire a human\n',
+                            style: TextStyle(color: _kInk),
+                          ),
+                          TextSpan(
+                            text: 'near you',
+                            style: TextStyle(color: _kSaffron),
+                          ),
+                        ],
                       ),
+                      textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 6),
                     Text(
                       (_userName != null && _userName!.trim().isNotEmpty)
                           ? 'Hi ${_userName!.trim().split(' ').first} — tell us what you need.'
@@ -1202,7 +1221,7 @@ class _HomeScreenState extends State<HomeScreen>
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: _kInk,
+                              color: _kSaffron,
                               borderRadius: BorderRadius.circular(18),
                             ),
                             child: const Text(
@@ -1447,14 +1466,14 @@ class _HappeningCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: const BoxDecoration(
-                    color: _kInk,
+                    color: Color(0xFFF3E2D2),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: Text(
                       example.name[0],
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFF6B4226),
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
