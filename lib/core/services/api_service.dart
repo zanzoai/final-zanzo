@@ -7,24 +7,10 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  /// Backend base URL (Production — Railway)
-  //static const String baseUrl = "https://zanzo-uk-mvp-production.up.railway.app";
+  //static const String baseUrl =
+  //"https://zanzo-test-production.up.railway.app/api/v1";
 
-  // static const String baseUrl =
-  //     "https://zanzo-uk-backend-production-4236.up.railway.app";
-
-  // static const String baseUrl =
-  //     "https://zanzo-uk-backend-production.up.railway.app/api/v1";
-
-  //  "https://zanzo-uk-backend-production-b2d0.up.railway.app/api/v1";
-
-  static const String baseUrl =
-      "https://zanzo-test-production.up.railway.app/api/v1";
-
-  //"https://test-geo-location-production.up.railway.app/api/v1";
-
-  /// Backend base URL (LAN/IP for local device testing)
-  // static const String baseUrl = "http://192.168.193.93:8000";
+  static const String baseUrl = "https://api-staging.zanzo.ai/api/v1";
 
   /// Shared HTTP client
   static final http.Client httpClient = http.Client();
