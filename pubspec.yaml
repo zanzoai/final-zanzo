@@ -2,7 +2,7 @@ name: zanzo_frontend
 description: A new Flutter project.
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.8.1
@@ -50,7 +50,7 @@ dependencies:
   camera: ^0.10.5+6
 
   # 🧠 OCR
-  google_mlkit_text_recognition: ^0.12.0
+  google_mlkit_text_recognition: ^0.14.0
 
 
   # 🎙️ Voice

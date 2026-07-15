@@ -11,10 +11,6 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Required for push notifications on Android 13+ (API 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Image picker: Android 13+ uses READ_MEDIA_IMAGES; Android 12 and below uses READ_EXTERNAL_STORAGE -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
 
     <application
         android:name="${applicationName}"
