@@ -41,18 +41,37 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // 1) BOOTSTRAP — resolve viewer, start WS (history arrives in connected frame)
+  // 1) BOOTSTRAP — resolve viewer, load REST history, then start WS
   // ---------------------------------------------------------------------------
   Future<void> _bootstrap() async {
-    _viewerUserId = widget.viewerUserId;
-    if (_viewerUserId == null) {
-      final prefs = await SharedPreferences.getInstance();
-      _viewerUserId = prefs.getString('user_id');
-    }
-
+    // Initialise synchronously so dispose() is always safe regardless of what
+    // the async steps below do.
     _wsChat = TaskChatWsService(widget.jobId);
     _wsChat.addListener(_onWsUpdate);
-    await _wsChat.connect();
+    try {
+      _viewerUserId = widget.viewerUserId;
+      if (_viewerUserId == null) {
+        final prefs = await SharedPreferences.getInstance();
+        _viewerUserId = prefs.getString('user_id');
+      }
+
+      // Load history via REST first so the chat is immediately usable even
+      // when Redis/WebSocket is unavailable.  The WS "connected" frame
+      // merges with this via _onWsUpdate when it arrives.
+      try {
+        final history = await MessagesApi.listByJob(widget.jobId);
+        if (mounted) setState(() => _messages = history);
+      } catch (_) {
+        // Not fatal — WS "connected" may still deliver history.
+      }
+
+      await _wsChat.connect();
+    } catch (_) {
+      // The WS service schedules its own reconnect on failure. Nothing to do.
+    } finally {
+      // Always drop the full-screen spinner.
+      if (mounted && _loading) setState(() => _loading = false);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -61,8 +80,17 @@ class _ChatScreenState extends State<ChatScreen> {
   void _onWsUpdate() {
     if (!mounted) return;
     setState(() {
-      _messages = _wsChat.messages;
-      // Clear loading once the connected frame has been received.
+      // Merge WS messages with locally-inserted ones (e.g. optimistic sends).
+      // WS version takes precedence for the same id; local extras are kept
+      // until the echo arrives.
+      final byId = <String, ChatMessage>{
+        for (final m in _messages) m.id: m,
+      };
+      for (final m in _wsChat.messages) {
+        byId[m.id] = m;
+      }
+      _messages = byId.values.toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
       if (_wsChat.isConnected) _loading = false;
     });
     _scrollToBottom();
@@ -88,12 +116,21 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       setState(() => _sending = true);
 
-      await MessagesApi.sendText(
+      final sent = await MessagesApi.sendText(
         jobId: widget.jobId,
         senderUserId: _viewerUserId!,
         content: text,
       );
-      // WS message.new will push the echo; scroll proactively.
+
+      // Optimistically insert so the sender sees the message immediately,
+      // without waiting for the WS echo (which requires Redis).
+      // The WS echo will be deduplicated by id in _onWsUpdate.
+      if (mounted && !_messages.any((m) => m.id == sent.id)) {
+        setState(() {
+          _messages = [..._messages, sent]
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        });
+      }
       _scrollToBottom();
     } catch (_) {
       if (!mounted) return;
@@ -154,19 +191,30 @@ class _ChatScreenState extends State<ChatScreen> {
           _input.text.trim().isEmpty ? null : _input.text.trim();
       if (caption != null) _input.clear();
 
-      await MessagesApi.uploadAndSendImage(
+      final sent = await MessagesApi.uploadAndSendImage(
         jobId: widget.jobId,
         senderUserId: _viewerUserId!,
         bytes: bytes,
         fileExt: ext,
         caption: caption,
       );
-      // WS message.new will push the echo; scroll proactively.
+
+      // Optimistically insert so the sender sees the image immediately.
+      if (mounted && !_messages.any((m) => m.id == sent.id)) {
+        setState(() {
+          _messages = [..._messages, sent]
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        });
+      }
       _scrollToBottom();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Image send failed: $e')),
+        const SnackBar(
+          content: Text(
+            "Image couldn't be sent. Check your connection and try again.",
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
