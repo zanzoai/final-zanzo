@@ -8,6 +8,8 @@ coverage/
 # iOS
 ios/Pods/
 ios/.symlinks/
+ios/vendor/
+ios/.bundle/
 ios/Flutter/Flutter.framework
 ios/Flutter/Flutter.podspec
 ios/ServiceDefinitions.json
@@ -27,4 +29,3 @@ android/key.properties
 .DS_Store
 .flutter-plugins-dependencies
 .dart_tool/
-pubspec.lock
