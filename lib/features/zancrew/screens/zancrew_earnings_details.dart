@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:zanzo_frontend/core/services/zancrew_earnings_service.dart';
+import 'package:zanzo_frontend/core/widgets/error_state.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 
 class ZanCrewEarningsDetailsScreen extends StatefulWidget {
   final String crewUserId;
@@ -18,6 +20,7 @@ class _ZanCrewEarningsDetailsScreenState
     extends State<ZanCrewEarningsDetailsScreen> {
   Map<String, dynamic>? data;
   bool loading = true;
+  bool _error = false;
   Timer? _autoRefreshTimer;
 
   // Warm Zanzo palette
@@ -64,11 +67,15 @@ class _ZanCrewEarningsDetailsScreenState
       setState(() {
         data = result;
         loading = false;
+        _error = false;
       });
     } catch (e) {
       debugPrint('Earnings load error: $e');
       if (!mounted) return;
-      setState(() => loading = false);
+      setState(() {
+        loading = false;
+        _error = true;
+      });
     }
   }
 
@@ -91,7 +98,12 @@ class _ZanCrewEarningsDetailsScreenState
         ),
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonDetail(showButton: false)
+          : (_error && (data == null || data!.isEmpty))
+          ? ErrorState(
+              message: "We couldn't load your earnings. Please try again.",
+              onRetry: () => loadEarnings(showFullScreenLoader: true),
+            )
           : (data == null || data!.isEmpty)
           ? const Center(
               child: Padding(
