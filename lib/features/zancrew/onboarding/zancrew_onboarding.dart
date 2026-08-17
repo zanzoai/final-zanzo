@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/zancrew_api.dart';
+import '../dashboard/zancrew_dashboard.dart';
 import 'uk_work_status_screen.dart';
 
 class ZanCrewOnboarding extends StatefulWidget {
@@ -187,9 +188,17 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
         ).showSnackBar(const SnackBar(content: Text('Preferences updated.')));
         Navigator.pop(context, true);
       } else {
+        // India users skip the UK right-to-work forms and go straight to the
+        // dashboard to see tasks; UK users continue to the work-status gate.
+        final countryCode = prefs.getString('country_code');
+        final phone = prefs.getString('user_phone') ?? '';
+        final isIndia = countryCode == 'IN' || phone.startsWith('+91');
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const UkWorkStatusScreen()),
+          MaterialPageRoute(
+            builder: (_) =>
+                isIndia ? const ZanCrewDashboard() : const UkWorkStatusScreen(),
+          ),
         );
       }
     } catch (e) {

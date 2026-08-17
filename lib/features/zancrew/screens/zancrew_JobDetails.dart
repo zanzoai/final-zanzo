@@ -23,6 +23,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:zanzo_frontend/core/widgets/error_state.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/features/common/chat/chat_screen.dart';
 
 import '../../../core/services/api_service.dart';
@@ -38,6 +40,7 @@ class CrewJobDetail extends StatefulWidget {
 
 class _CrewJobDetailState extends State<CrewJobDetail> {
   bool _loading = true;
+  bool _error = false;
   bool _posting = false;
 
   Map<String, dynamic>? _job; // full job snapshot from /jobs/{id}
@@ -119,7 +122,10 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
   // ---------------------------------------------------------------------------
 
   Future<void> _loadJob() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
     try {
       final res = await ApiService.getJson('/tasks/${widget.jobId}');
       if (!mounted) return;
@@ -140,15 +146,12 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
           });
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load job: HTTP ${res.statusCode}')),
-        );
+        // Inline error state instead of a snackbar (see build()).
+        setState(() => _error = true);
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to load job: $e')));
+      setState(() => _error = true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1352,7 +1355,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
           ),
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const SkeletonDetail(),
       );
     }
 
@@ -1370,7 +1373,12 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.2),
           ),
         ),
-        body: const Center(child: Text('Job not found')),
+        body: _error
+            ? ErrorState(
+                message: "We couldn't load this job. Please try again.",
+                onRetry: _loadJob,
+              )
+            : const Center(child: Text('Job not found')),
       );
     }
 

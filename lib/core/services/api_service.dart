@@ -10,7 +10,7 @@ class ApiService {
   //static const String baseUrl =
   //"https://zanzo-test-production.up.railway.app/api/v1";
 
-  static const String baseUrl = "https://api-staging.zanzo.ai/api/v1";
+  static const String baseUrl = "https://api-test.zanzo.ai/api/v1";
 
   /// Shared HTTP client
   static final http.Client httpClient = http.Client();

@@ -16,6 +16,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/api_service.dart';
+import '../../../core/widgets/error_state.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/payment_chip.dart';
 import '../onboarding/uk_bank_details_screen.dart';
 import 'zancrew_JobDetails.dart';
@@ -31,6 +33,7 @@ class CrewOfferDetail extends StatefulWidget {
 
 class _CrewOfferDetailState extends State<CrewOfferDetail> {
   bool _loading = true;
+  bool _error = false;
   bool _posting = false;
   bool _hasActiveJob = false;
 
@@ -235,7 +238,10 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
     try {
       final res = await ApiService.getJson('/tasks/$_jobId');
 
@@ -246,15 +252,12 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
           setState(() => _job = Map<String, dynamic>.from(data));
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load job: HTTP ${res.statusCode}')),
-        );
+        // Inline error state instead of a snackbar (see build()).
+        setState(() => _error = true);
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to load job: $e')));
+      setState(() => _error = true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -677,7 +680,12 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
       ),
 
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonDetail()
+          : (_error && (_job == null || _job!.isEmpty))
+          ? ErrorState(
+              message: "We couldn't load this offer. Please try again.",
+              onRetry: _loadJob,
+            )
           : RefreshIndicator(
               onRefresh: () async {
                 await _loadJob();

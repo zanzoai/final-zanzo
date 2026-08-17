@@ -22,6 +22,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // ⭐ Supabase for realtime
 import 'package:zanzo_frontend/core/services/zancrew_earnings_service.dart';
+import 'package:zanzo_frontend/core/widgets/error_state.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 
 import '../../../core/services/api_service.dart';
 import '../../../core/services/crew_offers_ws_service.dart';
@@ -55,6 +57,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   String? _crewUserId;
 
   bool _offersLoading = false;
+  bool _offersError = false;
   List<Map<String, dynamic>> _offers = const [];
 
   String _currentTab = 'offered';
@@ -363,22 +366,27 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       _loading = false;
     });
 
-    // If SharedPreferences still says not enabled, live-check UK provider
-    // status — the admin may have approved via Supabase without the prefs
-    // being updated on this device.
-    if (!_zancrewEnabled && _crewUserId != null) {
-      try {
-        final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
-        if (ukStatus != null &&
-            ukStatus['provider_status'] == 'approved' &&
-            ukStatus['can_receive_offers'] == true) {
-          await prefs.setBool('zancrew_enabled', true);
-          if (mounted) setState(() => _zancrewEnabled = true);
-        }
-      } catch (_) {}
+    // ── FAST PATH: fetch offers immediately ────────────────────────────────
+    // Offers only need _crewUserId — not the online-sync POST, the UK status
+    // live-check, or the activation banner. Previously those three sequential
+    // network awaits ran BEFORE the offers fetch, delaying the list by 2–3
+    // round-trips. Kick offers off right away and mark online in the
+    // background (offers don't depend on that POST completing).
+    if (_online && _crewUserId != null) {
+      _startLocationUpdates();
+      _refreshOffers(status: _currentTab);
+      _connectOffersWs();
+      _startOfferPolling();
+      unawaited(
+        ZanCrewApi.setOnline(
+          userId: _crewUserId!,
+          online: true,
+        ).catchError((_) => false),
+      );
+    } else {
+      // Still refresh earnings even if offline, so earnings card is always current
+      _recalculateTodayEarningsFromOffers(_currentTab);
     }
-
-    await _maybeShowActivationBanner();
 
     // 🔔 FCM: start refresh listener once; silently re-register token if already online
     _initFcmRefreshListener();
@@ -386,20 +394,30 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       unawaited(_registerCurrentFcmToken());
     }
 
-    // CRITICAL FIX: re-sync backend
-    if (_online && _crewUserId != null) {
-      try {
-        await ZanCrewApi.setOnline(userId: _crewUserId!, online: true);
-      } catch (_) {}
-
-      _startLocationUpdates();
-      _refreshOffers(status: _currentTab);
-      _connectOffersWs();
-      _startOfferPolling();
-    } else {
-      // Still refresh earnings even if offline, so earnings card is always current
-      _recalculateTodayEarningsFromOffers(_currentTab);
-    }
+    // ── BACKGROUND: UK approval live-check + activation banner ──────────────
+    // These used to block the offers fetch. The UK provider status check only
+    // applies to UK users — India users have no UK record, so skip that
+    // (otherwise-wasted, timeout-prone) call for them entirely.
+    final isIndia =
+        prefs.getString('country_code') == 'IN' ||
+        (prefs.getString('user_phone')?.startsWith('+91') ?? false);
+    unawaited(() async {
+      // If SharedPreferences still says not enabled, live-check UK provider
+      // status — the admin may have approved via Supabase without the prefs
+      // being updated on this device.
+      if (!_zancrewEnabled && _crewUserId != null && !isIndia) {
+        try {
+          final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
+          if (ukStatus != null &&
+              ukStatus['provider_status'] == 'approved' &&
+              ukStatus['can_receive_offers'] == true) {
+            await prefs.setBool('zancrew_enabled', true);
+            if (mounted) setState(() => _zancrewEnabled = true);
+          }
+        } catch (_) {}
+      }
+      if (mounted) await _maybeShowActivationBanner();
+    }());
 
     unawaited(_checkActiveJob());
   }
@@ -689,16 +707,17 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       if (!mounted) return;
       setState(() {
         _offers = list;
+        _offersError = false;
       });
 
       _recalculateTodayEarningsFromOffers(effStatus);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to load offers. Please try again.'),
-        ),
-      );
+      // No snackbar — a failed (often background/poll) refresh must never
+      // interrupt the user, especially when offers are already on screen.
+      // Only surface an inline error state, and only when the list is empty
+      // (see _buildOffersList); otherwise keep showing what we have.
+      setState(() => _offersError = true);
     } finally {
       if (showLoading && mounted) setState(() => _offersLoading = false);
     }
@@ -1275,12 +1294,6 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: _accent)),
-      );
-    }
-
     final isInbox = _currentTab == 'offered';
     final tabIndex = isInbox ? 0 : 1;
 
@@ -1353,9 +1366,14 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         ),
         body: Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: !_zancrewEnabled
-              ? _buildZanCrewOffBody(context)
-              : _buildZanCrewOnBody(context, isInbox),
+          // While the initial load runs, keep the header + tabs visible and
+          // shimmer only the content area — shaped like the online dashboard
+          // (earnings card + online toggle + offer list).
+          child: _loading
+              ? _dashboardSkeleton()
+              : (!_zancrewEnabled
+                    ? _buildZanCrewOffBody(context)
+                    : _buildZanCrewOnBody(context, isInbox)),
         ),
       ),
     );
@@ -1415,6 +1433,61 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   // SUB-UI — ZanCrew enabled
   // ---------------------------------------------------------------------------
+  // Loading shimmer shaped like the online dashboard: earnings summary card,
+  // online-toggle card, then the offer list.
+  Widget _dashboardSkeleton() {
+    return Column(
+      children: [
+        Shimmer(
+          child: Column(
+            children: [
+              const SkeletonCard(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SkeletonBone(width: 110, height: 12),
+                        SizedBox(height: 12),
+                        SkeletonBone(width: 80, height: 22),
+                      ],
+                    ),
+                    SkeletonBone(
+                      width: 44,
+                      height: 44,
+                      radius: BorderRadius.all(Radius.circular(12)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const SkeletonCard(
+                padding: EdgeInsets.fromLTRB(14, 14, 14, 14),
+                child: Row(
+                  children: [
+                    Expanded(child: SkeletonLine(widthFactor: 0.4, height: 15)),
+                    SizedBox(width: 12),
+                    SkeletonBone(
+                      width: 46,
+                      height: 26,
+                      radius: BorderRadius.all(Radius.circular(14)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Expanded(
+          child: SkeletonOfferList(padding: EdgeInsets.fromLTRB(0, 4, 0, 16)),
+        ),
+      ],
+    );
+  }
+
   Widget _buildZanCrewOnBody(BuildContext context, bool isInbox) {
     return Column(
       children: [
@@ -1542,7 +1615,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   Widget _buildOffersList(bool isInbox) {
     if (_offersLoading) {
-      return const Center(child: CircularProgressIndicator(color: _accent));
+      return const SkeletonOfferList();
+    }
+
+    // Error only when there's nothing to show — a background refresh failing
+    // while offers are on screen keeps the existing list.
+    if (_offers.isEmpty && _offersError) {
+      return ErrorState(
+        message: "We couldn't load offers. Please try again.",
+        onRetry: () => _refreshOffers(status: _currentTab),
+      );
     }
 
     if (_offers.isEmpty) {

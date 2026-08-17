@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/messages_api.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/core/services/task_chat_ws_service.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -243,7 +244,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const SkeletonChat()
                 : _buildMessages(),
           ),
           _buildInput(),
