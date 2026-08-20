@@ -26,6 +26,9 @@ class CrewOffersWsService with ChangeNotifier {
   void Function(String taskId)? onOfferReceived;
   void Function(String taskId)? onOfferExpired;
   void Function(String taskId)? onTaskCancelled;
+  /// Admin force-offline (or re-online): `crew.status_changed` carries the new
+  /// online state. See ZANZO_FLUTTER_API_REFERENCE.md §5.1.
+  void Function(bool isOnline)? onStatusChanged;
 
   int _reconnectAttempts = 0;
   bool _disposed = false;
@@ -117,6 +120,14 @@ class CrewOffersWsService with ChangeNotifier {
           break;
         case 'task.cancelled':
           onTaskCancelled?.call(data['task_id']?.toString() ?? '');
+          break;
+        case 'crew.status_changed':
+          // Admin forced the crew offline (today only is_online:false is sent).
+          final isOnline = data['is_online'] == true;
+          if (kDebugMode) {
+            print('[CrewOffersWS] crew.status_changed is_online=$isOnline');
+          }
+          onStatusChanged?.call(isOnline);
           break;
         case 'error':
           final code = data['code'] as int? ?? 0;

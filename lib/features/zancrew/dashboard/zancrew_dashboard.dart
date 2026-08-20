@@ -158,9 +158,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
     // Foreground FCM: new_offer arrives while the app is open — silent refresh
     _fcmForegroundSub = FirebaseMessaging.onMessage.listen((message) {
-      if (message.data['type'] == 'new_offer' && _online && mounted) {
+      final type = message.data['type'];
+      if (type == 'new_offer' && _online && mounted) {
         debugPrint('[FCM] foreground new_offer — refreshing offers');
         _refreshOffers(status: 'offered', showLoading: false);
+      } else if (type == 'crew_status_changed') {
+        // Admin force-offline twin of the WS crew.status_changed event.
+        // FCM values are strings ("true"/"false").
+        final isOnline = message.data['is_online'] == 'true';
+        debugPrint('[FCM] crew_status_changed is_online=$isOnline');
+        if (!isOnline) _applyForcedOffline();
       }
     }, onError: (e) => debugPrint('[FCM] onMessage error: $e'));
   }
@@ -683,8 +690,39 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         _refreshOffers(status: _currentTab, showLoading: false);
     svc.onTaskCancelled = (_) =>
         _refreshOffers(status: _currentTab, showLoading: false);
+    svc.onStatusChanged = (isOnline) {
+      if (!isOnline) _applyForcedOffline();
+    };
     svc.connect();
     _wsOffers = svc;
+  }
+
+  /// Applies an admin force-offline (from the `crew.status_changed` WS event or
+  /// the `crew_status_changed` FCM twin). Flips the local toggle offline and
+  /// tears down offer activity WITHOUT calling the backend (it already set the
+  /// state). Idempotent — safe if both the WS event and the push arrive.
+  Future<void> _applyForcedOffline() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('zancrew_online', false);
+    if (!mounted) {
+      _online = false;
+      return;
+    }
+    if (!_online && _offers.isEmpty) return; // already offline — nothing to do
+    setState(() {
+      _online = false;
+      _offers = <Map<String, dynamic>>[];
+    });
+    _locationTimer?.cancel();
+    _stopOfferPolling();
+    // Defer the offers-WS teardown so we don't dispose it from inside its own
+    // event callback.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _disconnectOffersWs());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('An admin has set you offline.'),
+      ),
+    );
   }
 
   void _disconnectOffersWs() {
