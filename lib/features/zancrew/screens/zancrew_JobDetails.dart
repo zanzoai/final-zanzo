@@ -23,6 +23,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:zanzo_frontend/core/services/task_chat_ws_service.dart';
+import 'package:zanzo_frontend/core/notifications/chat_unread_store.dart';
+import 'package:zanzo_frontend/core/notifications/push_router.dart';
 import 'package:zanzo_frontend/core/widgets/error_state.dart';
 import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/features/common/chat/chat_screen.dart';
@@ -51,6 +55,17 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
   int _minutesWorked = 0;
   bool _sessionActive = false;
   RealtimeChannel? _jobEventsChannel;
+
+  // --- live task countdown (once work is in progress) ---
+  Timer? _countdownTimer;
+  double? _countdownEndEpoch;
+
+  // --- live chat unread badge ---
+  TaskChatWsService? _chatWs;
+  String? _viewerUserId;
+  final Set<String> _seenChatIds = <String>{};
+  bool _chatSeeded = false;
+  int _unreadChat = 0;
 
   // Accepted job flow
   static const List<String> _flow = [
@@ -84,13 +99,199 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       if (!mounted) return;
       _refreshSessionSummary();
     });
+    _startChatUnreadWatch();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  LIVE CHAT UNREAD (badge on the "Chat with customer" action)
+  // ---------------------------------------------------------------------------
+
+  Future<void> _startChatUnreadWatch() async {
+    _viewerUserId = await _resolveViewerUserId();
+    if (!mounted) return;
+    // Badge is sourced from the shared store (also fed by FCM pushes while this
+    // screen is away), so seed from it and listen for changes.
+    ChatUnreadStore.instance.addListener(_onUnreadStoreChanged);
+    unawaited(ChatUnreadStore.instance.load());
+    _syncUnreadFromStore();
+    final ws = TaskChatWsService(widget.jobId)..addListener(_onChatWsUpdate);
+    _chatWs = ws;
+    unawaited(ws.connect());
+  }
+
+  void _onUnreadStoreChanged() => _syncUnreadFromStore();
+
+  void _syncUnreadFromStore() {
+    if (!mounted) return;
+    final count = ChatUnreadStore.instance.countFor(widget.jobId);
+    if (count != _unreadChat) setState(() => _unreadChat = count);
+  }
+
+  void _onChatWsUpdate() {
+    final ws = _chatWs;
+    if (ws == null || !mounted) return;
+    if (!_chatSeeded) {
+      _chatSeeded = true;
+      for (final m in ws.messages) {
+        _seenChatIds.add(m.id);
+      }
+      return;
+    }
+    // A push may have counted the same message already — the store dedupes by id.
+    final viewingThisChat = PushRouter.currentChatTaskId == widget.jobId;
+    for (final m in ws.messages) {
+      final fromOther =
+          _viewerUserId == null || m.senderUserId != _viewerUserId;
+      if (fromOther && !_seenChatIds.contains(m.id)) {
+        _seenChatIds.add(m.id);
+        if (!viewingThisChat) {
+          unawaited(ChatUnreadStore.instance.add(widget.jobId, m.id));
+        }
+      }
+    }
+  }
+
+  void _markChatSeen() {
+    final ws = _chatWs;
+    if (ws != null) {
+      for (final m in ws.messages) {
+        _seenChatIds.add(m.id);
+      }
+    }
+    unawaited(ChatUnreadStore.instance.clear(widget.jobId));
   }
 
   @override
   void dispose() {
     _jobEventsChannel?.unsubscribe();
     _summaryTimer?.cancel();
+    _countdownTimer?.cancel();
+    ChatUnreadStore.instance.removeListener(_onUnreadStoreChanged);
+    _chatWs?.removeListener(_onChatWsUpdate);
+    _chatWs?.dispose();
     super.dispose();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  LIVE TASK COUNTDOWN — mirrors the customer's timer (same per-job anchor)
+  // ---------------------------------------------------------------------------
+
+  Future<void> _recomputeCountdown() async {
+    final jobId = widget.jobId;
+    final status = _currentStatus();
+    final d = _job?['duration_hours'];
+    final durationMinutes = (d is num) ? (d * 60).round() : 0;
+    final active = status == 'in_progress' && durationMinutes > 0;
+
+    if (!active) {
+      if (_countdownEndEpoch != null) {
+        _countdownEndEpoch = null;
+        _countdownTimer?.cancel();
+        if (mounted) setState(() {});
+      }
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'countdown_start_$jobId';
+    var startEpoch = prefs.getInt(key);
+    if (startEpoch == null) {
+      startEpoch = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      await prefs.setInt(key, startEpoch);
+    }
+    final endEpoch = (startEpoch + durationMinutes * 60).toDouble();
+    if (endEpoch == _countdownEndEpoch) return;
+    _countdownEndEpoch = endEpoch;
+    if (mounted) setState(() {});
+
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  static String _fmtHms(int totalSeconds) {
+    final t = totalSeconds < 0 ? 0 : totalSeconds;
+    final h = t ~/ 3600;
+    final m = (t % 3600) ~/ 60;
+    final s = t % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+
+  /// True once the scheduled countdown has hit zero (we then count up in red).
+  bool get _isOvertime {
+    final end = _countdownEndEpoch;
+    if (end == null) return false;
+    return DateTime.now().millisecondsSinceEpoch / 1000 - end >= 0;
+  }
+
+  String get _countdownText {
+    final end = _countdownEndEpoch;
+    if (end == null) return '';
+    final remaining = end - DateTime.now().millisecondsSinceEpoch / 1000;
+    if (remaining <= 0) return '00:00';
+    return _fmtHms(remaining.floor());
+  }
+
+  /// Time elapsed since the deadline, counting up — the overtime clock.
+  String get _overtimeText {
+    final end = _countdownEndEpoch;
+    if (end == null) return '';
+    final over = DateTime.now().millisecondsSinceEpoch / 1000 - end;
+    return _fmtHms(over.floor());
+  }
+
+  static const Color _overtimeRed = Color(0xFFDC2626);
+
+  Widget _countdownCard() {
+    final overtime = _isOvertime;
+    final accent = overtime ? _overtimeRed : _success;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            overtime ? Icons.timelapse_rounded : Icons.timer_outlined,
+            color: accent,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  overtime ? 'Overtime (past scheduled end)' : 'Time remaining',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: overtime ? _overtimeRed : _muted,
+                    fontWeight: overtime ? FontWeight.w700 : FontWeight.w400,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  overtime ? '+$_overtimeText' : _countdownText,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: overtime ? _overtimeRed : _ink,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -106,7 +307,8 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
     final viewerUserId = await _resolveViewerUserId();
     if (!mounted) return;
 
-    Navigator.of(context).push(
+    _markChatSeen();
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           jobId: widget.jobId,
@@ -115,6 +317,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
         ),
       ),
     );
+    _markChatSeen();
   }
 
   // ---------------------------------------------------------------------------
@@ -126,35 +329,50 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       _loading = true;
       _error = false;
     });
-    try {
-      final res = await ApiService.getJson('/tasks/${widget.jobId}');
-      if (!mounted) return;
 
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body);
-        if (decoded is Map) {
-          final data = Map<String, dynamic>.from(
-            decoded.map((k, v) => MapEntry(k.toString(), v)),
-          );
-
-          setState(() {
-            _job = data;
-            final le = data['last_event'];
-            _lastEvent = (le is Map)
-                ? le.map((k, v) => MapEntry(k.toString(), v))
-                : null;
-          });
+    // Retry with backoff: right after accepting an offer the task's read-model
+    // can lag for a moment, so /tasks/{id} briefly returns a non-200 / throws
+    // and the crew sees "we couldn't load this job" until they reopen the app.
+    // Try a few times over ~3s before surfacing the error. (Purely a read —
+    // does not touch navigation or live-update wiring.)
+    Map<String, dynamic>? data;
+    for (int attempt = 0; attempt < 4; attempt++) {
+      try {
+        final res = await ApiService.getJson('/tasks/${widget.jobId}');
+        if (!mounted) return;
+        if (res.statusCode == 200) {
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map) {
+            data = Map<String, dynamic>.from(
+              decoded.map((k, v) => MapEntry(k.toString(), v)),
+            );
+          }
+          break; // got it
         }
+      } catch (_) {
+        if (!mounted) return;
+      }
+      if (attempt < 3) {
+        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+        if (!mounted) return;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      if (data != null) {
+        _job = data;
+        final le = data['last_event'];
+        _lastEvent =
+            (le is Map) ? le.map((k, v) => MapEntry(k.toString(), v)) : null;
+        _error = false;
       } else {
         // Inline error state instead of a snackbar (see build()).
-        setState(() => _error = true);
+        _error = true;
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = true);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+      _loading = false;
+    });
+    _recomputeCountdown();
   }
 
   // ---------------------------------------------------------------------------
@@ -497,8 +715,10 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             const SnackBar(content: Text('Start PIN verified — job started')),
           );
           await _loadJob();
-          if (mounted && _job != null)
+          if (mounted && _job != null) {
             setState(() => _job!['status'] = 'in_progress');
+            _recomputeCountdown(); // start-OTP verified → begin the countdown
+          }
           return; // success → exit loop
         } catch (_) {
           errorText = "Wrong PIN, please try again";
@@ -829,6 +1049,31 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
     );
   }
 
+  /// Opens the device's maps app with turn-by-turn directions to [addr].
+  Future<void> _openDirections(String addr) async {
+    if (addr.trim().isEmpty) return;
+    final q = Uri.encodeComponent(addr.trim());
+    // Google Maps universal directions URL — resolves to the native Maps app on
+    // both iOS and Android, falling back to the browser.
+    final url = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$q',
+    );
+    try {
+      final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open Maps.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open Maps.')),
+        );
+      }
+    }
+  }
+
   Widget _locationCard({required String addr, required String when}) {
     if (addr.isEmpty && when.isEmpty) return const SizedBox.shrink();
 
@@ -856,15 +1101,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
           if (addr.isNotEmpty)
             InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: () {
-                // No new dependency here. We keep compile-safe.
-                // You can wire a proper map launcher later (url_launcher).
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Maps opening can be wired next.'),
-                  ),
-                );
-              },
+              onTap: () => _openDirections(addr),
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -1433,7 +1670,13 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
           if (canChat)
             IconButton(
               tooltip: 'Chat with customer',
-              icon: const Icon(Icons.chat_bubble_outline),
+              icon: Badge(
+                isLabelVisible: _unreadChat > 0,
+                label: Text(_unreadChat > 99 ? '99+' : '$_unreadChat'),
+                backgroundColor: _accent,
+                textColor: Colors.white,
+                child: const Icon(Icons.chat_bubble_outline),
+              ),
               onPressed: _openChat,
             ),
         ],
@@ -1451,6 +1694,11 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
               paymentChip: paymentChip,
             ),
             const SizedBox(height: 12),
+
+            if (_countdownEndEpoch != null) ...[
+              _countdownCard(),
+              const SizedBox(height: 12),
+            ],
 
             _locationCard(addr: addr, when: when),
             const SizedBox(height: 12),

@@ -6,9 +6,16 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zanzo_frontend/core/theme/app_theme.dart';
+import 'package:zanzo_frontend/core/live_activity/job_live_activity.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/services/task_events_ws_service.dart';
+import 'package:zanzo_frontend/core/services/task_chat_ws_service.dart';
+import 'package:zanzo_frontend/core/notifications/chat_unread_store.dart';
+import 'package:zanzo_frontend/core/notifications/push_router.dart';
+import 'package:zanzo_frontend/core/services/zancrew_api.dart';
 import 'package:zanzo_frontend/features/common/chat/chat_screen.dart';
+import 'package:zanzo_frontend/features/common/reviews/crew_reviews.dart';
 
 class TrackJobScreen extends StatefulWidget {
   final String taskTitle;
@@ -23,6 +30,16 @@ class TrackJobScreen extends StatefulWidget {
     this.jobId,
     this.assignedCrew,
   });
+
+  // jobIds that currently have a *mounted* TrackJobScreen. Maintained ONLY by
+  // initState (add) / dispose (remove) — never reserved ahead of a push — so it
+  // can never get "stuck" and block a legitimate open. Auto-open / deep-link /
+  // banner push sites consult it to avoid stacking a duplicate for the same job
+  // (each duplicate would run its own poll + Live Activity sync and race).
+  static final Set<String> _mountedJobIds = <String>{};
+
+  static bool isOpenForJob(String? jobId) =>
+      jobId != null && jobId.isNotEmpty && _mountedJobIds.contains(jobId);
 
   @override
   State<TrackJobScreen> createState() => _TrackJobScreenState();
@@ -57,6 +74,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         _startPinUsed = (m['start_otp_verified'] == true);
         _endPinUsed = (m['end_otp_verified'] == true);
       });
+      _recomputeCountdown();
     } catch (_) {
       // Session not ready – UI will stay without PINs
     }
@@ -111,25 +129,41 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
 
   Map<String, dynamic>? _assignedCrew;
 
+  // ---------------- Live chat unread badge ----------------
+  TaskChatWsService? _chatWs;
+  String? _viewerUserId;
+  final Set<String> _seenChatIds = <String>{};
+  bool _chatSeeded = false;
+  int _unreadChat = 0;
+
+  // ---------------- Crew rating / review ----------------
+  double? _crewAvg;
+  int _crewCount = 0;
+  String? _crewRatingLoadedFor; // user_id we've fetched the summary for
+  bool _reviewPrompted = false; // guard so the review sheet shows once
+
   // ---------------- Theme tokens ----------------
-  static const Color _accent = Color(
-    0xFFD97706,
-  ); // saffron — matches home/review
-  static const Color _bg = Color(0xFFFCFAF6); // warm off-white
-  static const Color _surface = Color(
-    0xFFF5F2EE,
-  ); // warm surface for pills/badges
-  static const Color _card = Colors.white;
-  static const Color _ink = Color(0xFF26211C); // warm charcoal
-  static const Color _muted = Color(0xFF8C8378); // warm muted
-  static const Color _line = Color(0xFFE8E2D9); // warm divider
-  static const Color _success = Color(0xFF16A34A); // green — completed only
-  static const Color _warning = Color(0xFFF59E0B); // amber — in-progress
+  // Sourced from the central AppTheme so this screen shares Home's exact
+  // saffron/ink — previously it drifted to an amber #D97706 accent and a
+  // colder #26211C ink. See lib/core/theme/app_theme.dart.
+  static const Color _accent = AppColors.saffron;
+  static const Color _bg = AppColors.ground;
+  static const Color _surface = AppColors.surfaceMuted;
+  static const Color _card = AppColors.surface;
+  static const Color _ink = AppColors.ink;
+  static const Color _muted = AppColors.muted;
+  static const Color _line = AppColors.divider;
+  static const Color _success = AppColors.successInk;
+  static const Color _warning = AppColors.warning;
 
   @override
   void initState() {
     super.initState();
     _assignedCrew = widget.assignedCrew;
+    if (widget.jobId != null && widget.jobId!.isNotEmpty) {
+      TrackJobScreen._mountedJobIds.add(widget.jobId!);
+    }
+    if (_assignedCrew != null) _loadCrewRating();
 
     _pulseTimer = Timer.periodic(const Duration(milliseconds: 900), (_) {
       if (!mounted) return;
@@ -141,9 +175,75 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       _startPolling();
       _startWs(widget.jobId!);
       _loadSession();
+      _startChatUnreadWatch(widget.jobId!);
     } else {
       _startProgressSimulation();
     }
+  }
+
+  // ---------------- Live chat unread ----------------
+  Future<void> _startChatUnreadWatch(String jobId) async {
+    _viewerUserId = await _resolveViewerUserId();
+    if (!mounted) return;
+    // The unread badge is sourced from the shared store (also fed by FCM
+    // pushes while this screen is away), so seed from it and listen for changes.
+    ChatUnreadStore.instance.addListener(_onUnreadStoreChanged);
+    unawaited(ChatUnreadStore.instance.load());
+    _syncUnreadFromStore();
+    final ws = TaskChatWsService(jobId)..addListener(_onChatWsUpdate);
+    _chatWs = ws;
+    // Seed with existing history so old messages don't count as "unread".
+    unawaited(ws.connect());
+  }
+
+  void _onUnreadStoreChanged() => _syncUnreadFromStore();
+
+  void _syncUnreadFromStore() {
+    final jobId = widget.jobId;
+    if (jobId == null || !mounted) return;
+    final count = ChatUnreadStore.instance.countFor(jobId);
+    if (count != _unreadChat) {
+      setState(() => _unreadChat = count);
+      _syncLiveActivity(); // reflect the unread badge in the Dynamic Island
+    }
+  }
+
+  void _onChatWsUpdate() {
+    final ws = _chatWs;
+    final jobId = widget.jobId;
+    if (ws == null || jobId == null || !mounted) return;
+    // On the first sync (the connected/history frame), treat everything already
+    // in the room as seen so old messages don't show up as unread.
+    if (!_chatSeeded) {
+      _chatSeeded = true;
+      for (final m in ws.messages) {
+        _seenChatIds.add(m.id);
+      }
+      return;
+    }
+    // A push may have counted the same message already — the store dedupes by id.
+    final viewingThisChat = PushRouter.currentChatTaskId == jobId;
+    for (final m in ws.messages) {
+      final fromOther =
+          _viewerUserId == null || m.senderUserId != _viewerUserId;
+      if (fromOther && !_seenChatIds.contains(m.id)) {
+        _seenChatIds.add(m.id);
+        if (!viewingThisChat) {
+          unawaited(ChatUnreadStore.instance.add(jobId, m.id));
+        }
+      }
+    }
+  }
+
+  void _markChatSeen() {
+    final ws = _chatWs;
+    if (ws != null) {
+      for (final m in ws.messages) {
+        _seenChatIds.add(m.id);
+      }
+    }
+    final jobId = widget.jobId;
+    if (jobId != null) unawaited(ChatUnreadStore.instance.clear(jobId));
   }
 
   // ---------------- Data sources ----------------
@@ -162,6 +262,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
           final d = m['duration_hours'];
           if (d is num && mounted) {
             setState(() => _durationMinutes = (d * 60).round());
+            _recomputeCountdown();
           }
         }
 
@@ -254,9 +355,29 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
             "avatar_url": a["avatar_url"],
           };
         });
+        _loadCrewRating();
       }
     } catch (e) {
       debugPrint('[track] assignee fetch error: $e');
+    }
+  }
+
+  /// Fetches the assigned crew's aggregate rating (avg + count) for the card.
+  Future<void> _loadCrewRating() async {
+    final id = (_assignedCrew?['user_id'] ?? '').toString().trim();
+    if (id.isEmpty || _crewRatingLoadedFor == id) return;
+    _crewRatingLoadedFor = id;
+    try {
+      final s = await ZanCrewApi.getUserRatingSummary(id);
+      if (!mounted) return;
+      setState(() {
+        final avg = s['avg_rating'];
+        _crewAvg = (avg is num) ? avg.toDouble() : double.tryParse('$avg');
+        final c = s['reviews_count'];
+        _crewCount = (c is num) ? c.round() : (int.tryParse('$c') ?? 0);
+      });
+    } catch (e) {
+      debugPrint('[track] crew rating fetch error: $e');
     }
   }
 
@@ -269,7 +390,8 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     final viewerUserId = await _resolveViewerUserId();
     if (!mounted) return;
 
-    Navigator.push(
+    _markChatSeen(); // entering the chat clears the unread badge
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ChatScreen(
@@ -277,6 +399,23 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
           jobTitle: widget.taskTitle,
           viewerUserId: viewerUserId,
         ),
+      ),
+    );
+    _markChatSeen(); // messages read while inside the chat are now seen
+  }
+
+  /// Chat entry point to the assigned crew, with a live unread-count badge.
+  Widget _chatWithCrewButton({double iconSize = 24}) {
+    return IconButton(
+      tooltip: 'Chat with Crew',
+      onPressed: _openChat,
+      color: _ink,
+      icon: Badge(
+        isLabelVisible: _unreadChat > 0,
+        label: Text(_unreadChat > 99 ? '99+' : '$_unreadChat'),
+        backgroundColor: _accent,
+        textColor: Colors.white,
+        child: Icon(Icons.chat_bubble_outline_rounded, size: iconSize),
       ),
     );
   }
@@ -339,6 +478,235 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
             status == 'settled')) {
       _loadSession();
     }
+
+    // A task going in_progress means the crew just verified the Start-OTP, so
+    // start the working countdown immediately (locally) instead of waiting for
+    // the _loadSession network round-trip — otherwise the DI reflects the new
+    // stage instantly but the countdown only appears a couple of seconds later.
+    if (prevStatus != status &&
+        (status == 'in_progress' || status == 'started')) {
+      if (!_startPinUsed) _startPinUsed = true;
+      _recomputeCountdown();
+    }
+
+    // Once the task completes, invite the customer to review their crew (once).
+    if (prevStatus != status &&
+        (status == 'completed' || status == 'settled')) {
+      _maybePromptReview();
+    }
+
+    _syncLiveActivity(status);
+  }
+
+  /// Shows the crew-review sheet a single time after completion, unless this
+  /// job was already reviewed on this device.
+  Future<void> _maybePromptReview() async {
+    if (_reviewPrompted) return;
+    final jobId = widget.jobId;
+    if (jobId == null || jobId.isEmpty) return;
+    _reviewPrompted = true;
+
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'reviewed_$jobId';
+    if (prefs.getBool(key) == true) return;
+
+    // Give the completion UI a beat to settle before presenting the sheet.
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+
+    final submitted = await showCrewReviewSheet(
+      context,
+      taskId: jobId,
+      crewName: (_assignedCrew?['name'] ?? '').toString(),
+    );
+    if (submitted) {
+      await prefs.setBool(key, true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Thanks for reviewing your crew!')),
+        );
+      }
+      // Refresh the card's rating to reflect the new review.
+      _crewRatingLoadedFor = null;
+      _loadCrewRating();
+    }
+  }
+
+  // ---------------- Live Activity (Dynamic Island / Lock Screen) ----------------
+  bool _liveActivityStarted = false;
+  bool _liveActivityEnded = false;
+  // Last state pushed to ActivityKit. iOS throttles Live Activity updates, so we
+  // only push when something actually changed (the poll ticks every ~1.5s).
+  String? _lastLaSignature;
+
+  /// Mirrors the current tracking state into an iOS Live Activity so the user
+  /// can follow their errand from the Lock Screen and Dynamic Island. No-op on
+  /// non-iOS / simulated (jobId-less) sessions. See
+  /// lib/core/live_activity/job_live_activity.dart.
+  void _syncLiveActivity([String? statusArg]) {
+    if (widget.jobId == null || widget.jobId!.isEmpty) return;
+    if (_liveActivityEnded) return;
+    final status = statusArg ?? _jobStatus;
+
+    final stageLabel = (currentStage >= 0 && currentStage < baseStages.length)
+        ? baseStages[currentStage]
+        : '';
+    final crewName = (_assignedCrew?['name'] ?? '').toString().trim();
+    final crew = crewName.isEmpty ? null : crewName;
+
+    if (status == 'completed' || status == 'settled') {
+      _liveActivityEnded = true;
+      _countdownTimer?.cancel();
+      JobLiveActivity.instance.end(
+        stageIndex: currentStage,
+        stageLabel: stageLabel,
+        statusRaw: status,
+        crewName: crew,
+      );
+      return;
+    }
+
+    // Don't start the activity from a chat/countdown tick before we know a real
+    // status — only status updates may kick it off.
+    if (!_liveActivityStarted && status.isEmpty) return;
+
+    final end = _countdownEndEpoch;
+    final overtime = _isOvertime;
+    // Overtime is part of the signature so crossing the deadline pushes exactly
+    // one update that flips the Dynamic Island to the red count-up clock.
+    final signature =
+        '$currentStage|$status|${crew ?? ''}|$_unreadChat|${end ?? 0}|$overtime';
+
+    if (!_liveActivityStarted) {
+      _liveActivityStarted = true;
+      _lastLaSignature = signature;
+      _lastLaPushAt = DateTime.now();
+      JobLiveActivity.instance.start(
+        taskTitle: widget.taskTitle,
+        totalStages: baseStages.length,
+        stageIndex: currentStage,
+        stageLabel: stageLabel,
+        statusRaw: status,
+        jobId: widget.jobId ?? '',
+        crewName: crew,
+        unreadCount: _unreadChat,
+        endEpoch: end,
+        overtime: overtime,
+      );
+      return;
+    }
+
+    // Push immediately when something changed. Additionally re-push the current
+    // state on a slow heartbeat: iOS silently throttles/drops Live Activity
+    // updates, and since we cache the last signature a dropped stage/countdown
+    // update would otherwise never be re-sent — leaving the DI stuck on a stale
+    // stage or countdown end. The heartbeat self-heals that within ~12s without
+    // the per-tick spamming that burns the OS update budget.
+    final now = DateTime.now();
+    final changed = signature != _lastLaSignature;
+    final stale = _lastLaPushAt == null ||
+        now.difference(_lastLaPushAt!) > const Duration(seconds: 12);
+    if (changed || stale) {
+      _lastLaSignature = signature;
+      _lastLaPushAt = now;
+      JobLiveActivity.instance.update(
+        stageIndex: currentStage,
+        stageLabel: stageLabel,
+        statusRaw: status,
+        crewName: crew,
+        unreadCount: _unreadChat,
+        endEpoch: end,
+        overtime: overtime,
+      );
+    }
+  }
+
+  DateTime? _lastLaPushAt;
+
+  // ---------------- Task countdown (starts once start-OTP is verified) ----------------
+  double? _countdownEndEpoch; // Unix epoch seconds of the task's end
+  Timer? _countdownTimer;
+
+  /// Anchors and (re)computes the working countdown. There is no backend start
+  /// timestamp, so the moment start-OTP is first seen verified is persisted per
+  /// job (survives navigation / restart) and the end = start + duration.
+  Future<void> _recomputeCountdown() async {
+    final jobId = widget.jobId;
+    if (jobId == null || jobId.isEmpty) return;
+
+    final active = _startPinUsed && !_endPinUsed && _durationMinutes > 0;
+    if (!active) {
+      if (_countdownEndEpoch != null) {
+        _countdownEndEpoch = null;
+        _countdownTimer?.cancel();
+        if (mounted) setState(() {});
+        _syncLiveActivity();
+      }
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'countdown_start_$jobId';
+    var startEpoch = prefs.getInt(key);
+    if (startEpoch == null) {
+      startEpoch = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      await prefs.setInt(key, startEpoch);
+    }
+    final endEpoch = (startEpoch + _durationMinutes * 60).toDouble();
+    if (endEpoch == _countdownEndEpoch) return;
+    _countdownEndEpoch = endEpoch;
+    if (mounted) setState(() {});
+    _syncLiveActivity();
+
+    _countdownTimer?.cancel();
+    _wasOvertime = _isOvertime;
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      // When the deadline is crossed, push one Live Activity update so the
+      // Dynamic Island flips to the red overtime count-up.
+      final nowOvertime = _isOvertime;
+      if (nowOvertime != _wasOvertime) {
+        _wasOvertime = nowOvertime;
+        _syncLiveActivity();
+      }
+      setState(() {}); // refresh the on-screen countdown text
+    });
+  }
+
+  bool _wasOvertime = false;
+
+  static String _fmtHms(int totalSeconds) {
+    final t = totalSeconds < 0 ? 0 : totalSeconds;
+    final h = t ~/ 3600;
+    final m = (t % 3600) ~/ 60;
+    final s = t % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+
+  /// True once the scheduled countdown has hit zero (we then count up in red).
+  bool get _isOvertime {
+    final end = _countdownEndEpoch;
+    if (end == null) return false;
+    return DateTime.now().millisecondsSinceEpoch / 1000 - end >= 0;
+  }
+
+  /// Human "12:34" / "1:02:03" remaining before the deadline.
+  String get _countdownText {
+    final end = _countdownEndEpoch;
+    if (end == null) return '';
+    final remaining = end - DateTime.now().millisecondsSinceEpoch / 1000;
+    if (remaining <= 0) return '00:00';
+    return _fmtHms(remaining.floor());
+  }
+
+  /// Time elapsed since the deadline, counting up — the overtime clock.
+  String get _overtimeText {
+    final end = _countdownEndEpoch;
+    if (end == null) return '';
+    final over = DateTime.now().millisecondsSinceEpoch / 1000 - end;
+    return _fmtHms(over.floor());
   }
 
   Future<void> _cancelJob() async {
@@ -485,12 +853,71 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
 
   @override
   void dispose() {
+    if (widget.jobId != null && widget.jobId!.isNotEmpty) {
+      TrackJobScreen._mountedJobIds.remove(widget.jobId!);
+    }
     _simTimer?.cancel();
     _pollTimer?.cancel();
     _pulseTimer?.cancel();
     _sessionTimer?.cancel();
     _wsTask?.dispose();
+    ChatUnreadStore.instance.removeListener(_onUnreadStoreChanged);
+    _chatWs?.removeListener(_onChatWsUpdate);
+    _chatWs?.dispose();
+    _countdownTimer?.cancel();
     super.dispose();
+  }
+
+  /// Live task countdown, shown once the start-OTP is verified.
+  static const Color _overtimeRed = Color(0xFFDC2626);
+
+  Widget _countdownCard() {
+    final overtime = _isOvertime;
+    final accent = overtime ? _overtimeRed : _accent;
+    final valueColor = overtime ? _overtimeRed : _ink;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            overtime ? Icons.timelapse_rounded : Icons.timer_outlined,
+            color: accent,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  overtime ? 'Overtime (past scheduled end)' : 'Time remaining',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: overtime ? _overtimeRed : _muted,
+                    fontWeight: overtime ? FontWeight.w700 : FontWeight.w400,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  overtime ? '+$_overtimeText' : _countdownText,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: valueColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ---------------- UI ----------------
@@ -513,12 +940,16 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         actions: [
           if (widget.jobId != null &&
               widget.jobId!.isNotEmpty &&
-              currentStage >= 1)
+              currentStage >= 1) ...[
+            // Once a crew has accepted, the primary header action is talking to
+            // them (with a live unread badge); general help moves to secondary.
+            _chatWithCrewButton(),
             IconButton(
               tooltip: "Get help",
               icon: const Icon(Icons.help_outline_rounded),
               onPressed: _openSupportSheet,
             ),
+          ],
           IconButton(
             tooltip: "Refresh",
             icon: _loading
@@ -578,6 +1009,14 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                 child: _statusBanner(isTaskComplete: isTaskComplete),
               ),
             ),
+
+            if (_countdownEndEpoch != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+                  child: _countdownCard(),
+                ),
+              ),
 
             SliverToBoxAdapter(
               child: Padding(
@@ -672,7 +1111,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   // Premium reassurance banner: tells user what's happening NOW
   Widget _statusBanner({required bool isTaskComplete}) {
     final String label = _currentStatusLabel();
-    final Color tint = isTaskComplete ? const Color(0xFFE8F5E9) : _surface;
+    final Color tint = isTaskComplete ? AppColors.successBg : _surface;
     // Pulse the dot for active (non-complete) states only
     final double dotSize = (!isTaskComplete && _pulse) ? 11.0 : 9.0;
     final double glowRadius = (!isTaskComplete && _pulse) ? 8.0 : 0.0;
@@ -756,12 +1195,26 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
   }
 
   // ---------------- Agent card ----------------
+  void _openCrewProfile() {
+    final crew = _assignedCrew;
+    if (crew == null) return;
+    showCrewProfileSheet(
+      context,
+      crewUserId: (crew['user_id'] ?? '').toString(),
+      crewName: (crew['name'] ?? '').toString(),
+      avatarUrl: (crew['avatar_url'] ?? '').toString(),
+    );
+  }
+
   Widget _agentCard() {
     final crew = _assignedCrew;
     final name = _titleCase((crew?['name'] ?? '').toString());
     final hasName = name.trim().isNotEmpty;
 
-    return _softCard(
+    return GestureDetector(
+      onTap: hasName ? _openCrewProfile : null,
+      behavior: HitTestBehavior.opaque,
+      child: _softCard(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         child: Column(
@@ -797,19 +1250,19 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
                       const SizedBox(height: 2),
                       Text(
                         hasName
-                            ? "Verified partner"
+                            ? "View profile & reviews ›"
                             : "Assigning a partner soon",
-                        style: TextStyle(fontSize: 13.5, color: _muted),
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: hasName ? _accent : _muted,
+                          fontWeight:
+                              hasName ? FontWeight.w600 : FontWeight.w400,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: "Message",
-                  onPressed: _openChat,
-                  icon: const Icon(Icons.chat_bubble_outline_rounded),
-                  color: _ink,
-                ),
+                _chatWithCrewButton(),
               ],
             ),
             const SizedBox(height: 12),
@@ -819,8 +1272,10 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
               children: [
                 _pill(
                   icon: Icons.star_rounded,
-                  label: "4.6",
-                  tint: const Color(0xFFFFF3E9),
+                  label: _crewCount == 0
+                      ? "New"
+                      : "${_crewAvg?.toStringAsFixed(1) ?? '—'} ($_crewCount)",
+                  tint: AppColors.warningBg,
                   fg: _warning,
                 ),
                 _pill(
@@ -839,6 +1294,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -864,8 +1320,8 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         : (isActive ? "In progress" : "Not started");
     final badgeColor = isCompleted ? _success : (isActive ? _warning : _muted);
     final badgeBg = isCompleted
-        ? const Color(0xFFE8F5E9)
-        : (isActive ? const Color(0xFFFFF3E9) : _surface);
+        ? AppColors.successBg
+        : (isActive ? AppColors.warningBg : _surface);
 
     return _softCard(
       child: Padding(
@@ -1108,11 +1564,15 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
     // it shows a check rather than a pulsing dot.
     final isComplete = currentStage == baseStages.length - 1;
 
-    return _softCard(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        child: Column(
-          children: List.generate(stages.length, (i) {
+    final rawId = widget.jobId ?? '';
+    final ticketId = rawId.length >= 5
+        ? rawId.substring(rawId.length - 5).toUpperCase()
+        : rawId.toUpperCase();
+
+    return _ticketCard(
+      ticketId: ticketId,
+      child: Column(
+        children: List.generate(stages.length, (i) {
             final reached =
                 i < currentStage || (isComplete && i == currentStage);
             final isCurrent = !isComplete && i == currentStage;
@@ -1159,14 +1619,11 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
             );
           }),
         ),
-      ),
-    );
+      );
   }
 
   Widget _timelineNode({required bool reached, required bool isCurrent}) {
-    final Color ring = reached
-        ? _accent
-        : const Color(0xFFE8E2D9); // _line equivalent
+    final Color ring = reached ? _accent : _line;
     final Color fill = reached ? _accent : Colors.white;
 
     final double glow = isCurrent ? (_pulse ? 0.30 : 0.12) : 0.0;
@@ -1215,6 +1672,104 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       ),
     );
   }
+
+  // ---------------- Ticket / receipt (Progress) ----------------
+  // The task rendered as a physical ticket: a receipt header, a perforated
+  // tear line with punched side-notches, then the live progress thread. Makes
+  // the tracking screen feel like a real-world handoff, not a status list.
+  Widget _ticketCard({required Widget child, String? ticketId}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: AppRadii.bannerR,
+        border: Border.all(color: _line),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.confirmation_number_outlined,
+                  size: 16,
+                  color: _accent,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'TASK TICKET',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.4,
+                    color: _muted,
+                  ),
+                ),
+                const Spacer(),
+                if (ticketId != null && ticketId.isNotEmpty)
+                  Text(
+                    '#$ticketId',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: _ink,
+                      letterSpacing: 0.5,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          _perforation(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            child: child,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // A tear line: dashed perforation across the card with a cream notch
+  // punched into each edge, so the header reads as a detachable stub.
+  Widget _perforation() {
+    return SizedBox(
+      height: 18,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 16,
+            right: 16,
+            top: 0,
+            bottom: 0,
+            child: CustomPaint(painter: _DashedLinePainter(color: _line)),
+          ),
+          Positioned(left: -9, child: _notch()),
+          Positioned(right: -9, child: _notch()),
+        ],
+      ),
+    );
+  }
+
+  Widget _notch() => Container(
+    width: 18,
+    height: 18,
+    decoration: BoxDecoration(
+      color: _bg,
+      shape: BoxShape.circle,
+      border: Border.all(color: _line),
+    ),
+  );
 
   // ---------------- Small UI helpers ----------------
   Widget _softCard({required Widget child}) {
@@ -1280,11 +1835,12 @@ class _SupportSheet extends StatefulWidget {
 }
 
 class _SupportSheetState extends State<_SupportSheet> {
-  static const Color _accent = Color(0xFFD97706);
-  static const Color _ink = Color(0xFF26211C);
-  static const Color _muted = Color(0xFF9B8B7E);
-  static const Color _border = Color(0xFFE8E2D9);
-  static const Color _surface = Color(0xFFF5F2EE);
+  // Shared tokens — see lib/core/theme/app_theme.dart
+  static const Color _accent = AppColors.saffron;
+  static const Color _ink = AppColors.ink;
+  static const Color _muted = AppColors.muted;
+  static const Color _border = AppColors.divider;
+  static const Color _surface = AppColors.surfaceMuted;
 
   static const List<String> _chips = [
     'Crew late',
@@ -1365,7 +1921,7 @@ class _SupportSheetState extends State<_SupportSheet> {
       case 'open':
         label = 'Open';
         bg = const Color(0xFFFEF3C7);
-        fg = const Color(0xFFD97706);
+        fg = _accent;
         break;
       case 'in_progress':
         label = 'In progress';
@@ -1649,4 +2205,29 @@ class _SupportSheetState extends State<_SupportSheet> {
       ),
     );
   }
+}
+
+// Horizontal dashed line — the ticket's perforation / tear guide.
+class _DashedLinePainter extends CustomPainter {
+  final Color color;
+  const _DashedLinePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    const dash = 5.0;
+    const gap = 5.0;
+    final y = size.height / 2;
+    double x = 0;
+    while (x < size.width) {
+      canvas.drawLine(Offset(x, y), Offset(x + dash, y), paint);
+      x += dash + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedLinePainter old) => old.color != color;
 }

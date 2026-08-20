@@ -50,7 +50,7 @@ dependencies:
   camera: ^0.10.5+6
 
   # 🧠 OCR
-  google_mlkit_text_recognition: ^0.14.0
+  google_mlkit_text_recognition: 0.13.1
 
 
   # 🎙️ Voice

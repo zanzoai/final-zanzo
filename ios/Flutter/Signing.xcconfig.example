@@ -1,0 +1,11 @@
+// TEMPLATE (committed). Copy this file to `Signing.xcconfig` in the same folder
+// and set your own Apple Developer Team ID. `Signing.xcconfig` is gitignored, so
+// your team ID never gets committed and never breaks anyone else's signing.
+//
+//   cp ios/Flutter/Signing.xcconfig.example ios/Flutter/Signing.xcconfig
+//
+// Find your Team ID (the 10-char value shown as the certificate's OU):
+//   security find-certificate -a -c "Apple Development" -p | openssl x509 -noout -subject
+//
+// See ios/TEAM_SETUP.md for full instructions.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
