@@ -18,6 +18,7 @@
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:zanzo_frontend/core/live_activity/deep_link_service.dart';
 import 'package:zanzo_frontend/core/notifications/chat_unread_store.dart';
@@ -31,8 +32,20 @@ import 'package:zanzo_frontend/features/common/chat/chat_screen.dart';
 /// completeness and future data-only handling.
 @pragma('vm:entry-point')
 Future<void> firebasePushBackgroundHandler(RemoteMessage message) async {
-  // No-op: display is handled by the OS; routing happens on tap in the UI
-  // isolate. Do not touch UI here — this runs in a background isolate.
+  // Runs in a background isolate — do NOT touch UI. We only persist state that
+  // the UI reads on next launch.
+  //
+  // Admin force-offline (`crew_status_changed`) is a silent/data-only push, so
+  // it must be applied here too: write the online flag so a backgrounded /
+  // terminated crew app comes up OFFLINE. The dashboard reads `zancrew_online`
+  // in _loadState. See ZANZO_FLUTTER_API_REFERENCE.md §4.
+  if (message.data['type'] == 'crew_status_changed') {
+    final isOnline = message.data['is_online'] == 'true';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('zancrew_online', isOnline);
+    } catch (_) {}
+  }
 }
 
 class PushRouter {
@@ -96,10 +109,22 @@ class PushRouter {
       case 'new_message':
         _handleNewMessage(data, opened: opened);
         break;
+      case 'crew_status_changed':
+        // Admin force-offline. Persist the flag app-wide so it's respected even
+        // if the crew isn't on the dashboard (which applies it live when it is).
+        _persistCrewOnline(data['is_online'] == 'true');
+        break;
       // `new_offer` and `task_status_update` are handled elsewhere / TBD.
       default:
         break;
     }
+  }
+
+  Future<void> _persistCrewOnline(bool isOnline) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('zancrew_online', isOnline);
+    } catch (_) {}
   }
 
   void _handleNewMessage(Map<String, dynamic> data, {required bool opened}) {
