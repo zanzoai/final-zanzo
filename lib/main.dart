@@ -1,10 +1,14 @@
 // lib/main.dart
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/live_activity/deep_link_service.dart';
+import 'core/notifications/push_router.dart';
+import 'core/theme/app_theme.dart';
 import 'features/common/home/home_screen.dart';
 import 'features/legal/privacy_screen.dart';
 import 'features/legal/settings_screen.dart';
@@ -22,6 +26,9 @@ Future<void> main() async {
   // 🔔 Firebase (reads GoogleService-Info.plist on iOS, google-services.json on Android)
   // ---------------------------
   await Firebase.initializeApp();
+
+  // Background/terminated push handler must be registered before runApp.
+  FirebaseMessaging.onBackgroundMessage(firebasePushBackgroundHandler);
 
   // ---------------------------
   // 🔐 Stripe Publishable Key
@@ -43,26 +50,35 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Handle Live Activity / Dynamic Island deep links once the tree is ready.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DeepLinkService.instance.init();
+      // App-wide FCM routing (in-task chat `new_message` pushes, etc.).
+      PushRouter.instance.init();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Zanzo AI',
       debugShowCheckedModeBanner: false,
+      navigatorKey: DeepLinkService.navigatorKey,
 
       // ---- Theme ----
-      theme: ThemeData(
-        fontFamily: 'Roboto',
-        primarySwatch: Colors.orange,
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          elevation: 0,
-          backgroundColor: Colors.orangeAccent,
-          foregroundColor: Colors.white,
-        ),
-      ),
+      // Single source of truth — see lib/core/theme/app_theme.dart
+      theme: AppTheme.light,
 
       // ---------------------------
       // 🏠 App Entry Point

@@ -290,6 +290,29 @@ class ZanCrewApi {
   }
 
   // ---------------------------------------------------------------------------
+  // 12b) USER REVIEWS  GET /zancrew/users/{user_id}/reviews
+  //    Reviews received by this user across all their tasks (newest first).
+  //    NOTE: backend endpoint may not exist yet — callers should treat a
+  //    failure/404 as "no list available" and fall back to the rating summary.
+  // ---------------------------------------------------------------------------
+
+  static Future<List<Map<String, dynamic>>> getUserReviews(String userId) async {
+    final res = await _call(
+      (h) => http.get(_u("/zancrew/users/$userId/reviews"), headers: h),
+    );
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception("Failed to load user reviews: ${res.statusCode}");
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) throw Exception("Unexpected user reviews payload");
+    return decoded
+        .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  // ---------------------------------------------------------------------------
   // 13) CONFIRM PAYMENT (crew COD)  POST /zancrew/confirm_payment
   // ---------------------------------------------------------------------------
 

@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Core
+import 'package:zanzo_frontend/core/theme/app_theme.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/services/auth.dart';
 import 'package:zanzo_frontend/core/services/speech_service.dart';
@@ -29,13 +30,13 @@ import 'package:zanzo_frontend/features/user/widgets/login_prompt_dialog.dart';
 import 'package:zanzo_frontend/features/zancrew/gateway/zancrew_gateway.dart';
 import 'package:zanzo_frontend/features/zancrew/screens/zancrew_JobDetails.dart';
 
-// Design tokens — scoped to this file
-const _kGround = Color(0xFFFCFAF6); // cream — kept in sync with native splash
-const _kInk = Color(0xFF3B2A1E); // warm dark brown (was cold charcoal)
-const _kSaffron = Color(
-  0xFFE8720C,
-); // richer brand orange (was amber-leaning #D97706)
-const _kMuted = Color(0xFF8C7B6E); // warmer taupe (was neutral grey)
+// Design tokens now live centrally in AppTheme. These aliases keep the many
+// call-sites terse while sourcing every value from the single token file, so
+// the brand is defined once — see lib/core/theme/app_theme.dart.
+const _kGround = AppColors.ground;
+const _kInk = AppColors.ink;
+const _kSaffron = AppColors.saffron;
+const _kMuted = AppColors.muted;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -279,6 +280,10 @@ class _HomeScreenState extends State<HomeScreen>
       // Catches the user returning from device Settings after granting location
       // permission — sync location so country_code is set before they post.
       _syncLocationOnResume();
+      // Refresh the active-task banners so someone who backgrounded/closed the
+      // app mid-task sees (and can tap back into) their current job on Home.
+      _checkActiveJob();
+      _checkCustomerActiveTask();
     }
   }
 
@@ -475,6 +480,9 @@ class _HomeScreenState extends State<HomeScreen>
           _didAutoOpenCustomerActiveTaskThisSession = true;
           WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (!mounted) return;
+            // Skip if a TrackJobScreen for this job is already open (e.g. one
+            // already pushed via the Live Activity deep link) so we don't stack.
+            if (TrackJobScreen.isOpenForJob(taskId)) return;
             await Navigator.push(
               context,
               MaterialPageRoute(
@@ -895,22 +903,15 @@ class _HomeScreenState extends State<HomeScreen>
                               Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Text(
-                                    'Zanzo',
-                                    style: TextStyle(
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.w700,
-                                      color: _kSaffron,
-                                      letterSpacing: -0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
+                                  const Text('Zanzo', style: AppText.wordmark),
+                                  const SizedBox(height: 6),
+                                  // Small saffron "voice bar" under the wordmark
                                   Container(
-                                    width: 18,
-                                    height: 1.5,
+                                    width: 22,
+                                    height: 3,
                                     decoration: BoxDecoration(
-                                      color: _kSaffron,
-                                      borderRadius: BorderRadius.circular(2),
+                                      gradient: AppGradients.saffronAction,
+                                      borderRadius: BorderRadius.circular(3),
                                     ),
                                   ),
                                 ],
@@ -981,57 +982,18 @@ class _HomeScreenState extends State<HomeScreen>
                                       builder: (context, _) {
                                         return Container(
                                           decoration: BoxDecoration(
-                                            // Subtle warm gradient — top bright white,
-                                            // base drifts toward the off-white ground colour.
-                                            // Gives a softly lifted, premium surface feel
-                                            // without blur or heavy effects.
-                                            gradient: const LinearGradient(
-                                              begin: Alignment.topCenter,
-                                              end: Alignment.bottomCenter,
-                                              colors: [
-                                                Color(
-                                                  0xFFFFFFFF,
-                                                ), // bright white top
-                                                Color(
-                                                  0xFFFEFBF6,
-                                                ), // warm tinted base
-                                              ],
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              26,
-                                            ),
+                                            // Softly-lifted paper surface that
+                                            // "breathes" with the glow anim —
+                                            // the tactile hero of the voice-first
+                                            // home. All values come from AppTheme.
+                                            gradient: AppGradients.liftedCard,
+                                            borderRadius: AppRadii.cardR,
                                             border: Border.all(
-                                              color: _kInk.withValues(
-                                                alpha: 0.08,
-                                              ),
+                                              color: AppColors.hairline(0.08),
                                             ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withValues(
-                                                  alpha:
-                                                      0.08 +
-                                                      (_glowAnim.value * 0.04),
-                                                ),
-                                                blurRadius:
-                                                    36 + (10 * _glowAnim.value),
-                                                spreadRadius: 0,
-                                                offset: Offset(
-                                                  0,
-                                                  12 + (3 * _glowAnim.value),
-                                                ),
-                                              ),
-                                              // Warm ambient glow — premium feel without blur
-                                              BoxShadow(
-                                                color: _kSaffron.withValues(
-                                                  alpha:
-                                                      0.04 +
-                                                      (_glowAnim.value * 0.03),
-                                                ),
-                                                blurRadius: 48,
-                                                spreadRadius: 0,
-                                                offset: const Offset(0, 10),
-                                              ),
-                                            ],
+                                            boxShadow: AppShadows.lifted(
+                                              _glowAnim.value,
+                                            ),
                                           ),
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 18,
@@ -1092,21 +1054,51 @@ class _HomeScreenState extends State<HomeScreen>
                                               ),
                                               const SizedBox(width: 4),
 
-                                              // Send — saffron circle, rightmost final action
+                                              // Send — living-saffron squircle,
+                                              // rightmost final action. Gradient
+                                              // + soft glow when armed; matches
+                                              // the iOS superellipse feel.
                                               GestureDetector(
                                                 onTap: canSend
                                                     ? _sendRequest
                                                     : null,
-                                                child: Container(
-                                                  width: 44,
-                                                  height: 44,
+                                                child: AnimatedContainer(
+                                                  duration: const Duration(
+                                                    milliseconds: 200,
+                                                  ),
+                                                  width: 46,
+                                                  height: 46,
                                                   decoration: BoxDecoration(
+                                                    gradient: canSend
+                                                        ? AppGradients
+                                                              .saffronAction
+                                                        : null,
                                                     color: canSend
-                                                        ? _kSaffron
-                                                        : _kSaffron.withValues(
-                                                            alpha: 0.3,
+                                                        ? null
+                                                        : AppColors.saffronTint(
+                                                            0.25,
                                                           ),
-                                                    shape: BoxShape.circle,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          16,
+                                                        ),
+                                                    boxShadow: canSend
+                                                        ? [
+                                                            BoxShadow(
+                                                              color: AppColors
+                                                                  .saffron
+                                                                  .withValues(
+                                                                    alpha: 0.35,
+                                                                  ),
+                                                              blurRadius: 14,
+                                                              offset:
+                                                                  const Offset(
+                                                                    0,
+                                                                    4,
+                                                                  ),
+                                                            ),
+                                                          ]
+                                                        : null,
                                                   ),
                                                   child: const Icon(
                                                     Icons.arrow_upward_rounded,
@@ -1273,6 +1265,12 @@ class _HomeScreenState extends State<HomeScreen>
                                 taskTitle: _customerActiveTaskTitle,
                                 rawStatus: _customerActiveTaskStatus,
                                 onTap: () async {
+                                  // Don't stack a second copy if it's already open.
+                                  if (TrackJobScreen.isOpenForJob(
+                                    _customerActiveTaskId,
+                                  )) {
+                                    return;
+                                  }
                                   await Navigator.push(
                                     context,
                                     MaterialPageRoute(
@@ -1342,9 +1340,9 @@ class _HomeScreenState extends State<HomeScreen>
                     child: Container(
                       height: 36,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: _kInk.withValues(alpha: 0.1)),
+                        color: AppColors.surface,
+                        borderRadius: AppRadii.pillR,
+                        border: Border.all(color: AppColors.hairline(0.1)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1385,7 +1383,7 @@ class _HomeScreenState extends State<HomeScreen>
                                       height: 6,
                                       margin: const EdgeInsets.only(right: 5),
                                       decoration: const BoxDecoration(
-                                        color: Color(0xFF4ADE80),
+                                        color: AppColors.success,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
@@ -1601,14 +1599,14 @@ class _HappeningCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: const BoxDecoration(
-                    color: Color(0xFFF3E2D2),
+                    color: AppColors.parcelTint,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: Text(
                       example.name[0],
                       style: const TextStyle(
-                        color: Color(0xFF6B4226),
+                        color: AppColors.parcelInk,
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
@@ -1637,7 +1635,7 @@ class _HappeningCard extends StatelessWidget {
                             width: 6,
                             height: 6,
                             decoration: const BoxDecoration(
-                              color: Color(0xFF4ADE80),
+                              color: AppColors.success,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -1741,9 +1739,9 @@ class _ActiveJobBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFEFBF6),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _kInk.withValues(alpha: 0.1)),
+          color: AppColors.surfaceWarm,
+          borderRadius: AppRadii.bannerR,
+          border: Border.all(color: AppColors.hairline(0.1)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
@@ -1754,7 +1752,7 @@ class _ActiveJobBanner extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const _PulsingDot(color: Color(0xFF4ADE80)),
+            const _PulsingDot(color: AppColors.success),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -1804,13 +1802,13 @@ class _ActiveJobBanner extends StatelessWidget {
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4ADE80).withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(999),
+                  color: AppColors.successTint(0.18),
+                  borderRadius: AppRadii.pillR,
                 ),
                 child: Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xFF16A34A),
+                    color: AppColors.successInk,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.1,
@@ -1878,8 +1876,8 @@ class _CustomerActiveTaskBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFBF3),
-          borderRadius: BorderRadius.circular(20),
+          color: AppColors.surfaceWarmAlt,
+          borderRadius: AppRadii.bannerR,
           border: Border.all(
             color: _kSaffron.withValues(alpha: 0.65),
             width: 1.5,

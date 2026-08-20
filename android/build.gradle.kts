@@ -17,7 +17,7 @@ allprojects {
 
     // ✅ Force Kotlin to use Java 17
     tasks.withType<KotlinCompile>().configureEach {
-        kotlinOptions.jvmTarget = "17"
+        compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 
     // ✅ Force Java to use Java 17
@@ -39,7 +39,7 @@ subprojects {
 
     // ✅ Apply JVM 17 config again for submodules/plugins
     tasks.withType<KotlinCompile>().configureEach {
-        kotlinOptions.jvmTarget = "17"
+        compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
     tasks.withType<JavaCompile>().configureEach {
         sourceCompatibility = JavaVersion.VERSION_17.toString()
@@ -62,7 +62,7 @@ gradle.afterProject {
         }
 
         tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-            kotlinOptions.jvmTarget = "17"
+            compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
         tasks.withType<JavaCompile>().configureEach {
             sourceCompatibility = JavaVersion.VERSION_17.toString()

@@ -112,22 +112,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (_) {}
 
-    // UK provider status is the authoritative approval gate — override
-    // zancrew_status and zancrew_enabled based on it so the profile card
-    // shows the correct state regardless of zancrew_profiles.status.
+    // UK provider status can refine an in-progress UK application, but it must
+    // NOT demote a crew who is already active. Approval via EITHER flow
+    // (non-UK ZanCrew or UK provider) sets can_receive_offers=true and the
+    // zan_crew row to `active`, so:
+    //   • can_receive_offers==true (or provider_status=='approved') ⇒ active.
+    //   • Only the three terminal UK statuses are meaningful; everything else
+    //     (submitted/reviewing/resubmit_docs/payroll_*) is "still under review".
+    //   • A rejected/suspended UK record must never override an already-active
+    //     crew (e.g. a non-UK crew whose UK provider record is empty/stale).
+    // See ZANZO_FLUTTER_API_REFERENCE.md §3 (provider_status lifecycle).
     try {
       final ukStatus = await UkProviderApi.getStatus(uid);
       if (ukStatus != null) {
         final providerStatus = ukStatus['provider_status'] as String? ?? '';
         final canReceive = ukStatus['can_receive_offers'] == true;
-        if (providerStatus == 'approved' && canReceive) {
+        final alreadyActive =
+            (prefs.getString('zancrew_status') ?? 'off') == 'active';
+
+        if (canReceive || providerStatus == 'approved') {
           await prefs.setString('zancrew_status', 'active');
           await prefs.setBool('zancrew_enabled', true);
-        } else if (providerStatus == 'pending') {
-          await prefs.setString('zancrew_status', 'pending');
-        } else if (providerStatus == 'rejected' ||
-            providerStatus == 'suspended') {
+        } else if (!alreadyActive &&
+            (providerStatus == 'rejected' || providerStatus == 'suspended')) {
           await prefs.setString('zancrew_status', 'rejected');
+        } else if (!alreadyActive && providerStatus.isNotEmpty) {
+          // submitted / reviewing / resubmit_docs / payroll_* → under review.
+          await prefs.setString('zancrew_status', 'pending');
         }
       }
     } catch (_) {}

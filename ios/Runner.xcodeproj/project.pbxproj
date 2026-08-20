@@ -7,16 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		12464EB4553A9C4C880FE1D7 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 080295BA577132E25D3ECD66 /* Foundation.framework */; };
 		12ADBAC258DC8EDDFAA72CD2 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D64BE9A32348E0308C3F8B7 /* Pods_Runner.framework */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		30AA81725F407022EFB818FF /* ZanzoLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 345A5DF47F4A81A468E217B5 /* ZanzoLiveActivityBundle.swift */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		4E17E9CE1B7D08604164E8F9 /* LiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1E2C6EF06E51506E0996666 /* LiveActivityBridge.swift */; };
+		53695F5952AF6B15798B717A /* ZanzoLiveActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6EFE0DA33A5DC78E25716501 /* ZanzoLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5B84A8F117F74B2DC65CCAE2 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2C6B5A2047EF8002E544F45E /* Pods_RunnerTests.framework */; };
+		5B875512B9F2480539772E19 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F66792B2262904449ACC6BAA /* WidgetKit.framework */; };
+		6D2287A058ECCFF9D30A6D6A /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 19FA0F6DA561B446012A571F /* SwiftUI.framework */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 		7E7A7C6A2FC9AE6700448665 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7E7A7C692FC9AE6700448665 /* GoogleService-Info.plist */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		9F2BD734206541646CB6347F /* DeepLinkBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1089438BF994B31D6BFF1C /* DeepLinkBridge.swift */; };
+		C0A579FE2ECBDCC6D4697007 /* JobActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20CFC6BF6F9490BE48DA7AF /* JobActivityAttributes.swift */; };
+		C5D9B9DD30966771E0DB4AF5 /* ZanzoLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5372EA7D8282F9051D479B6A /* ZanzoLiveActivity.swift */; };
+		FDA3F433BE3FAE853868BBC6 /* JobActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20CFC6BF6F9490BE48DA7AF /* JobActivityAttributes.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,6 +37,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		6A2878CDAC77C15FFDC755CB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 346CD07073421B7B5A183C63;
+			remoteInfo = ZanzoLiveActivity;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -40,21 +58,40 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C7C2720B05FDA9EA63A48EA1 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				53695F5952AF6B15798B717A /* ZanzoLiveActivity.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		080295BA577132E25D3ECD66 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
+		19D108EF1D6B0BA9CB37593A /* ZanzoLiveActivity.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = ZanzoLiveActivity.xcconfig; sourceTree = "<group>"; };
+		19FA0F6DA561B446012A571F /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		2C6B5A2047EF8002E544F45E /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		345A5DF47F4A81A468E217B5 /* ZanzoLiveActivityBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ZanzoLiveActivityBundle.swift; sourceTree = "<group>"; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		4D7CCD9B90BEC54AF2E06E3A /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		51BCB063AFA8EB162F77A874 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
+		5372EA7D8282F9051D479B6A /* ZanzoLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ZanzoLiveActivity.swift; sourceTree = "<group>"; };
+		6EFE0DA33A5DC78E25716501 /* ZanzoLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ZanzoLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		7E7A7C692FC9AE6700448665 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		8D1089438BF994B31D6BFF1C /* DeepLinkBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeepLinkBridge.swift; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -63,17 +100,32 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		9D64BE9A32348E0308C3F8B7 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20CFC6BF6F9490BE48DA7AF /* JobActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = JobActivityAttributes.swift; sourceTree = "<group>"; };
 		B3E51EB28FA7CD8403874342 /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
 		BC362C51DD2E5ED3CE119171 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		BC3A636A1FFFA7982CEE64AA /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
+		CBF8EB964A4BC8B4D1CA6F56 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D7F5628E04CFFC5B7B9CE4A8 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		E1E2C6EF06E51506E0996666 /* LiveActivityBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveActivityBridge.swift; sourceTree = "<group>"; };
+		F66792B2262904449ACC6BAA /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		02147B74B7058C7745084CD0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				12464EB4553A9C4C880FE1D7 /* Foundation.framework in Frameworks */,
+				6D2287A058ECCFF9D30A6D6A /* SwiftUI.framework in Frameworks */,
+				5B875512B9F2480539772E19 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		97C146EB1CF9000F007C117D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				12ADBAC258DC8EDDFAA72CD2 /* Pods_Runner.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -89,6 +141,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		16FBBD2229F475536A972C74 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				080295BA577132E25D3ECD66 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		331C8082294A63A400263BE5 /* RunnerTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -97,9 +157,31 @@
 			path = RunnerTests;
 			sourceTree = "<group>";
 		};
+		60AA3C648DBDC8F392237767 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B20CFC6BF6F9490BE48DA7AF /* JobActivityAttributes.swift */,
+			);
+			name = Shared;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		81CAC5E4092DBDB33016589F /* ZanzoLiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				345A5DF47F4A81A468E217B5 /* ZanzoLiveActivityBundle.swift */,
+				5372EA7D8282F9051D479B6A /* ZanzoLiveActivity.swift */,
+				CBF8EB964A4BC8B4D1CA6F56 /* Info.plist */,
+				19D108EF1D6B0BA9CB37593A /* ZanzoLiveActivity.xcconfig */,
+			);
+			name = ZanzoLiveActivity;
+			path = ZanzoLiveActivity;
+			sourceTree = "<group>";
+		};
 		9740EEB11CF90186004384FC /* Flutter */ = {
 			isa = PBXGroup;
 			children = (
+				78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */,
 				3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */,
 				9740EEB21CF90195004384FC /* Debug.xcconfig */,
 				7AFA3C8E1D35360C0083082E /* Release.xcconfig */,
@@ -117,6 +199,8 @@
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				E4ABC138CD6B0AFD4855AE9D /* Pods */,
 				DDF1CE4697BC99F5190836BD /* Frameworks */,
+				81CAC5E4092DBDB33016589F /* ZanzoLiveActivity */,
+				60AA3C648DBDC8F392237767 /* Shared */,
 			);
 			sourceTree = "<group>";
 		};
@@ -125,6 +209,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				6EFE0DA33A5DC78E25716501 /* ZanzoLiveActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -141,6 +226,8 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				7E7A7C692FC9AE6700448665 /* GoogleService-Info.plist */,
+				E1E2C6EF06E51506E0996666 /* LiveActivityBridge.swift */,
+				8D1089438BF994B31D6BFF1C /* DeepLinkBridge.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -150,6 +237,9 @@
 			children = (
 				9D64BE9A32348E0308C3F8B7 /* Pods_Runner.framework */,
 				2C6B5A2047EF8002E544F45E /* Pods_RunnerTests.framework */,
+				16FBBD2229F475536A972C74 /* iOS */,
+				19FA0F6DA561B446012A571F /* SwiftUI.framework */,
+				F66792B2262904449ACC6BAA /* WidgetKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -189,6 +279,23 @@
 			productReference = 331C8081294A63A400263BE5 /* RunnerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		346CD07073421B7B5A183C63 /* ZanzoLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 692F5B6CDA405F01C55BC614 /* Build configuration list for PBXNativeTarget "ZanzoLiveActivity" */;
+			buildPhases = (
+				0B7958EA3C49F7C5A75F0ACA /* Sources */,
+				02147B74B7058C7745084CD0 /* Frameworks */,
+				7B0CFDC038EEB8DE6E8E6F77 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ZanzoLiveActivity;
+			productName = ZanzoLiveActivity;
+			productReference = 6EFE0DA33A5DC78E25716501 /* ZanzoLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
@@ -199,14 +306,19 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				C7C2720B05FDA9EA63A48EA1 /* Embed App Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				D682F3114311BB974796C37B /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0A39BC21E8765411690FCFA3 /* PBXTargetDependency */,
 			);
 			name = Runner;
+			packageProductDependencies = (
+				78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */,
+			);
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
@@ -240,18 +352,29 @@
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
+			packageReferences = (
+				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */,
+			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				346CD07073421B7B5A183C63 /* ZanzoLiveActivity */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		331C807F294A63A400263BE5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7B0CFDC038EEB8DE6E8E6F77 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -368,6 +491,16 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0B7958EA3C49F7C5A75F0ACA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				30AA81725F407022EFB818FF /* ZanzoLiveActivityBundle.swift in Sources */,
+				C5D9B9DD30966771E0DB4AF5 /* ZanzoLiveActivity.swift in Sources */,
+				C0A579FE2ECBDCC6D4697007 /* JobActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		331C807D294A63A400263BE5 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -382,12 +515,21 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
+				FDA3F433BE3FAE853868BBC6 /* JobActivityAttributes.swift in Sources */,
+				4E17E9CE1B7D08604164E8F9 /* LiveActivityBridge.swift in Sources */,
+				9F2BD734206541646CB6347F /* DeepLinkBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0A39BC21E8765411690FCFA3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ZanzoLiveActivity;
+			target = 346CD07073421B7B5A183C63 /* ZanzoLiveActivity */;
+			targetProxy = 6A2878CDAC77C15FFDC755CB /* PBXContainerItemProxy */;
+		};
 		331C8086294A63A400263BE5 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
@@ -458,7 +600,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -474,7 +616,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = RJRKGJ6662;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -539,6 +680,63 @@
 			};
 			name = Profile;
 		};
+		5A4359F4069C1361A325295D /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 19D108EF1D6B0BA9CB37593A /* ZanzoLiveActivity.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ZanzoLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yosrith.zanzouk.ZanzoLiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Profile;
+		};
+		609A1D9E1ADBB8C832DCB6B1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 19D108EF1D6B0BA9CB37593A /* ZanzoLiveActivity.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ZanzoLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yosrith.zanzouk.ZanzoLiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		97C147031CF9000F007C117D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -588,7 +786,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -639,7 +837,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -657,7 +855,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = RJRKGJ6662;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -680,7 +877,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = RJRKGJ6662;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -695,6 +891,35 @@
 			};
 			name = Release;
 		};
+		C3F50E18168448374700B71E /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 19D108EF1D6B0BA9CB37593A /* ZanzoLiveActivity.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ZanzoLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yosrith.zanzouk.ZanzoLiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -704,6 +929,16 @@
 				331C8088294A63A400263BE5 /* Debug */,
 				331C8089294A63A400263BE5 /* Release */,
 				331C808A294A63A400263BE5 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		692F5B6CDA405F01C55BC614 /* Build configuration list for PBXNativeTarget "ZanzoLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C3F50E18168448374700B71E /* Release */,
+				609A1D9E1ADBB8C832DCB6B1 /* Debug */,
+				5A4359F4069C1361A325295D /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -729,6 +964,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FlutterGeneratedPluginSwiftPackage;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }

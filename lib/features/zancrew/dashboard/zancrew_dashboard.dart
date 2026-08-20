@@ -402,19 +402,39 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         prefs.getString('country_code') == 'IN' ||
         (prefs.getString('user_phone')?.startsWith('+91') ?? false);
     unawaited(() async {
-      // If SharedPreferences still says not enabled, live-check UK provider
-      // status — the admin may have approved via Supabase without the prefs
-      // being updated on this device.
-      if (!_zancrewEnabled && _crewUserId != null && !isIndia) {
+      // If SharedPreferences still says not enabled, live-check the server —
+      // the account may be an approved crew whose enabled flag simply isn't in
+      // THIS device's prefs yet (e.g. a fresh iOS install, or a crew that was
+      // approved on another device). Without this, switching to work mode shows
+      // "ZanCrew Mode is OFF" instead of the online toggle.
+      if (!_zancrewEnabled && _crewUserId != null) {
+        // Region-agnostic: the zan_crew profile row is `active` (and
+        // can_receive_offers) after approval via BOTH the /become and UK flows,
+        // so this also covers India crew — for whom the UK-only check below is
+        // skipped entirely. See [[zanzo-crew-status-rule]].
         try {
-          final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
-          if (ukStatus != null &&
-              ukStatus['provider_status'] == 'approved' &&
-              ukStatus['can_receive_offers'] == true) {
+          final profile = await ZanCrewApi.getProfile(_crewUserId);
+          final status = (profile?['status'] ?? '').toString().toLowerCase();
+          final canReceive = profile?['can_receive_offers'] == true;
+          if (status == 'active' || canReceive) {
             await prefs.setBool('zancrew_enabled', true);
             if (mounted) setState(() => _zancrewEnabled = true);
           }
         } catch (_) {}
+
+        // UK refinement (non-India) — admin may have approved via Supabase
+        // without updating the zan_crew row this device can see.
+        if (!_zancrewEnabled && !isIndia) {
+          try {
+            final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
+            if (ukStatus != null &&
+                ukStatus['provider_status'] == 'approved' &&
+                ukStatus['can_receive_offers'] == true) {
+              await prefs.setBool('zancrew_enabled', true);
+              if (mounted) setState(() => _zancrewEnabled = true);
+            }
+          } catch (_) {}
+        }
       }
       if (mounted) await _maybeShowActivationBanner();
     }());

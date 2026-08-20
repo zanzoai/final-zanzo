@@ -91,6 +91,11 @@
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
         </intent>
+        <!-- Needed on Android 11+ so url_launcher can open https links (Maps directions). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 
 </manifest>

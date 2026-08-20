@@ -25,6 +25,11 @@ android/key.properties
 .vscode/*
 .idea/
 
+# SwiftPM build artifacts (Flutter SPM migration)
+**/swiftpm/
+ios/Flutter/ephemeral/
+macos/Flutter/ephemeral/
+
 # OS
 .DS_Store
 .flutter-plugins-dependencies

@@ -13,6 +13,8 @@ import Stripe
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    LiveActivityBridge.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "ZanzoLiveActivityBridge")!)
+    DeepLinkBridge.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "ZanzoDeepLinkBridge")!)
   }
 
   override func application(
@@ -22,6 +24,10 @@ import Stripe
   ) -> Bool {
     let stripeHandled = StripeAPI.handleURLCallback(with: url)
     if stripeHandled {
+      return true
+    }
+    // Live Activity / Dynamic Island tap → open the tracked task.
+    if DeepLinkBridge.handle(url: url) {
       return true
     }
     return super.application(app, open: url, options: options)
