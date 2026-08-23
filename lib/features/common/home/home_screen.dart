@@ -457,7 +457,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
       if (data != null && data['active'] == true) {
         final taskId = data['task_id']?.toString();
-        final taskTitle = data['title']?.toString();
+        final taskTitle = (data['short_title'] ?? data['title'])?.toString();
         final taskStatus = data['status']?.toString();
         final taskLocation = data['location_address']?.toString();
 

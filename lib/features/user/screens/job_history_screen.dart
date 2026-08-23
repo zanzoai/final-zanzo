@@ -335,9 +335,9 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
     final title = backendConcise.isNotEmpty
         ? backendConcise
         : _safeStr(
-            job['title'],
+            job['short_title'],
             _safeStr(
-              job['short_title'],
+              job['title'],
               _safeStr(job['polished_task'], 'Your Task'),
             ),
           );

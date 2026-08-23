@@ -1619,7 +1619,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
       );
     }
 
-    final title = (_job!['title'] ?? '').toString();
+    final title = (_job!['short_title'] ?? _job!['title'] ?? '').toString();
     final desc = (_job!['polished_task'] ?? '').toString();
     final addr = (_job!['location_address'] ?? '').toString();
     final when = _whenLabel();

@@ -34,7 +34,7 @@ Future<void> main() async {
   // 🔐 Stripe Publishable Key
   // ---------------------------
   Stripe.publishableKey =
-      'pk_test_51TZ9da3OAXc8h9NvpMErQIZuJiuxoMekiYD9DIMHdlIqenOxpdfNFbsoxAhEjvkNjLW7vWwiKJlV52VjRKzTI36q007are6pr1';
+      'pk_test_51RoCgkCZAx8jHGm1MXdhkXh2GnMMcOH9UT3jwUjSkYpP3jtiHJUA6Y4BcIyNBOAqtai1r7FYmpwA8MxZt6rMLpME007ktJPeeH';
   await Stripe.instance.applySettings();
 
   // ---------------------------

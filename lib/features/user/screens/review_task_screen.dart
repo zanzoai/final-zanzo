@@ -647,10 +647,14 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
 
       final payData = json.decode(payRes.body);
       final clientSecret = payData['client_secret'];
+      final customerId = payData['customer_id'] as String?;
+      final customerSessionClientSecret =
+          payData['customer_session_client_secret'] as String?;
 
       print(
         '🔷 [Stripe] clientSecret present: ${clientSecret != null} prefix: ${clientSecret?.toString().substring(0, 20)}',
       );
+      print('🔷 [Stripe] customerId: $customerId');
 
       if (clientSecret == null) {
         throw Exception("No client_secret returned");
@@ -663,6 +667,8 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
           merchantDisplayName: 'Zanzo AI',
           style: ThemeMode.light,
           returnURL: 'zanzo://stripe-redirect',
+          customerId: customerId,
+          customerSessionClientSecret: customerSessionClientSecret,
         ),
       );
       print(

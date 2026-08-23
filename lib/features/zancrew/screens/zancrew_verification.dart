@@ -218,11 +218,12 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
 
   Future<void> _pickDob(BuildContext context) async {
     final now = DateTime.now();
+    final latest18 = DateTime(now.year - 18, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime(now.year - 21, now.month, now.day),
       firstDate: DateTime(1900),
-      lastDate: now,
+      lastDate: latest18,
     );
     if (picked == null) return;
 
@@ -1353,8 +1354,18 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
   String? _reqDob(String? v) {
     final t = v?.trim() ?? '';
     if (t.isEmpty) return 'Required';
-    final rgx = RegExp(r'^\d{4}-\d{2}-\d{2}$'); // YYYY-MM-DD
-    return rgx.hasMatch(t) ? null : 'Use YYYY-MM-DD';
+    final rgx = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+    if (!rgx.hasMatch(t)) return 'Use YYYY-MM-DD';
+    final dob = DateTime.tryParse(t);
+    if (dob == null) return 'Invalid date';
+    final now = DateTime.now();
+    final age = now.year - dob.year -
+        ((now.month < dob.month ||
+                (now.month == dob.month && now.day < dob.day))
+            ? 1
+            : 0);
+    if (age < 18) return 'Must be 18 or older';
+    return null;
   }
 
   String? _reqIfsc(String? v) {

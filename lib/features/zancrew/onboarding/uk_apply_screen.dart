@@ -212,6 +212,39 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
   }
 
   // ---------------------------------------------------------------------------
+  // DATE PICKERS
+  // ---------------------------------------------------------------------------
+  Future<void> _pickDob(BuildContext context) async {
+    final now = DateTime.now();
+    // lastDate = exactly 18 years ago — the picker itself blocks under-18 dates
+    final latest18 = DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year - 21, now.month, now.day),
+      firstDate: DateTime(1900),
+      lastDate: latest18,
+    );
+    if (picked == null) return;
+    _dobCtrl.text =
+        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _pickVisaExpiry(BuildContext context) async {
+    final now = DateTime.now();
+    // Minimum 3 months from today — can't apply with an expiring visa
+    final minExpiry = DateTime(now.year, now.month + 3, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year + 1, now.month, now.day),
+      firstDate: minExpiry,
+      lastDate: DateTime(2100),
+    );
+    if (picked == null) return;
+    _visaExpiryCtrl.text =
+        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+  }
+
+  // ---------------------------------------------------------------------------
   // FORM FIELD DECORATION HELPER
   // ---------------------------------------------------------------------------
   InputDecoration _dec(String label, {String? hint, String? helperText}) {
@@ -364,15 +397,25 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
               // Date of birth
               TextFormField(
                 controller: _dobCtrl,
-                decoration: _dec('Date of Birth *', hint: '1990-01-31'),
-                keyboardType: TextInputType.datetime,
+                readOnly: true,
+                onTap: () => _pickDob(context),
+                decoration: _dec('Date of Birth *').copyWith(
+                  suffixIcon: const Icon(Icons.calendar_today_outlined,
+                      size: 20, color: _muted),
+                ),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) {
                     return 'Date of birth is required';
                   }
-                  if (DateTime.tryParse(v.trim()) == null) {
-                    return 'Use format YYYY-MM-DD';
-                  }
+                  final dob = DateTime.tryParse(v.trim());
+                  if (dob == null) return 'Invalid date';
+                  final now = DateTime.now();
+                  final age = now.year - dob.year -
+                      ((now.month < dob.month ||
+                              (now.month == dob.month && now.day < dob.day))
+                          ? 1
+                          : 0);
+                  if (age < 18) return 'You must be 18 or older to apply';
                   return null;
                 },
               ),
@@ -438,18 +481,16 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _visaExpiryCtrl,
+                  readOnly: true,
+                  onTap: () => _pickVisaExpiry(context),
                   decoration: _dec(
-                    'Visa Expiry Date (YYYY-MM-DD)',
-                    hint: '2026-12-31',
+                    'Visa Expiry Date',
+                    helperText:
+                        'Your visa must be valid for at least 3 months from today.',
+                  ).copyWith(
+                    suffixIcon: const Icon(Icons.calendar_today_outlined,
+                        size: 20, color: _muted),
                   ),
-                  keyboardType: TextInputType.datetime,
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return null;
-                    if (DateTime.tryParse(v.trim()) == null) {
-                      return 'Use format YYYY-MM-DD';
-                    }
-                    return null;
-                  },
                 ),
               ],
 
