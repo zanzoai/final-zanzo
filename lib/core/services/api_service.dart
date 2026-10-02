@@ -507,24 +507,8 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
-  // AUTH (EMAIL + PHONE)
+  // AUTH (PHONE OTP)
   // ---------------------------------------------------------------------------
-
-  // POST /auth/auth/send-email-otp  →  { name?, email }
-  static Future<http.Response> sendEmailOtp(String email, {String? name}) {
-    return _post(_u('/auth/send-email-otp'), {
-      'email': email.trim(),
-      if (name != null) 'name': name.trim(),
-    });
-  }
-
-  // POST /auth/verify-email-otp  →  { email, otp }
-  static Future<http.Response> verifyEmailOtp(String email, String otp) {
-    return _post(_u('/auth/verify-email-otp'), {
-      'email': email.trim(),
-      'otp': otp.trim(),
-    });
-  }
 
   // POST /auth/send-phone-otp  →  { phone }
   static Future<http.Response> sendPhoneOtp(String phoneE164) {
