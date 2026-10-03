@@ -48,6 +48,24 @@ subprojects {
     }
 }
 
+// ✅ Fix: give a namespace to old plugins that don't declare one.
+// AGP 8 requires every Android library to set `namespace`; older plugins (e.g.
+// flutter_keyboard_visibility 5.4.1, pulled in by flutter_typeahead) only have
+// the legacy `package` attribute in their AndroidManifest.xml. Reuse that value.
+subprojects {
+    plugins.withId("com.android.library") {
+        extensions.configure<LibraryExtension> {
+            if (namespace == null) {
+                val manifest = file("src/main/AndroidManifest.xml")
+                val pkg = if (manifest.exists()) {
+                    Regex("""package\s*=\s*"([^"]+)"""").find(manifest.readText())?.groupValues?.get(1)
+                } else null
+                namespace = pkg ?: "dev.flutter.plugins.${project.name.replace('-', '_')}"
+            }
+        }
+    }
+}
+
 // ✅ Clean task
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
