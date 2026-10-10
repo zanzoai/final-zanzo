@@ -98,8 +98,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (profile == null) {
         // No crew profile: not a crew member.
         await prefs.setString('zancrew_status', 'off');
+        await prefs.setBool('zancrew_enabled', false);
       } else {
         await prefs.setString('zancrew_status', profile['status'] ?? 'off');
+        // Keeps the home "Work" toggle in step with the status shown here.
+        await prefs.setBool('zancrew_enabled', profile['status'] == 'active');
         // The API sends buckets as comma-separated text; older builds sent a
         // list. Casting the text to a List threw and skipped the rest.
         final rawBuckets = profile['buckets'];

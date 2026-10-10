@@ -23,6 +23,9 @@ class TrackJobScreen extends StatefulWidget {
   final String userLocation;
   final String? jobId;
   final Map<String, dynamic>? assignedCrew;
+  // True when opened straight after a successful payment, so the
+  // "Your job is live!" message shows once the job is searching.
+  final bool justPaid;
 
   const TrackJobScreen({
     super.key,
@@ -30,6 +33,7 @@ class TrackJobScreen extends StatefulWidget {
     required this.userLocation,
     this.jobId,
     this.assignedCrew,
+    this.justPaid = false,
   });
 
   // jobIds that currently have a *mounted* TrackJobScreen. Maintained ONLY by
@@ -460,7 +464,12 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       if (idx != null && idx != currentStage) currentStage = idx;
       _jobStatus = status;
     });
-    if (!wasSearching && status == 'searching') {
+    // Only right after payment or on a real change to "searching" — not every
+    // time an already-searching job is opened from My Orders or home.
+    final firstLoad = prevStatus.isEmpty;
+    if (!wasSearching &&
+        status == 'searching' &&
+        (!firstLoad || widget.justPaid)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(

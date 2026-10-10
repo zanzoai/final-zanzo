@@ -642,6 +642,7 @@ class _HomeScreenState extends State<HomeScreen>
     final signedIn = await Auth.requireSignIn(context);
     if (!signedIn || !mounted) return;
     await _loadUser(); // keep greeting / avatar in sync after first login
+    unawaited(_backgroundSyncZanCrew()); // and the Work toggle
 
     setState(() {
       _isLoading = true;
@@ -810,6 +811,7 @@ class _HomeScreenState extends State<HomeScreen>
       final ok = await showLoginPrompt(context);
       if (!ok) return;
       await _loadUser();
+      unawaited(_backgroundSyncZanCrew());
     }
 
     if (!mounted) return;
@@ -881,6 +883,7 @@ class _HomeScreenState extends State<HomeScreen>
       final ok = await showLoginPrompt(context);
       if (!ok) return;
       await _loadUser(); // sync name/phone into state after login
+      await _backgroundSyncZanCrew();
     }
 
     if (!mounted) return;
@@ -1913,6 +1916,8 @@ class _CustomerActiveTaskBanner extends StatelessWidget {
 
   String get _statusText {
     switch (rawStatus) {
+      case 'searching':
+        return 'Finding a ZanCrew partner';
       case 'assigned':
         return 'ZanCrew accepted your task';
       case 'travelling':
