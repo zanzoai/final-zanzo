@@ -547,26 +547,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       },
     );
     if (pickedTime == null) return;
-
-    if (pickedTime.hour < 7 || pickedTime.hour >= 22) {
-      if (!mounted) return;
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Outside working hours'),
-          content: const Text(
-            'Jobs can only be booked between 7:00 AM and 10:00 PM. Please choose a time within working hours.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
+    // Working hours (07:00–22:00) are checked by the server in the task's own
+    // country time zone (London / Kolkata) and its message is shown if the
+    // time is outside them. A check here would use the phone's time zone.
 
     setState(() {
       _isNow = false;
@@ -828,8 +811,16 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         '🔴 [Stripe] StripeException: code=${e.error.code} message=${e.error.localizedMessage} declineCode=${e.error.declineCode}',
       );
       if (!mounted) return;
+      // Closing the payment sheet is the user's choice, not an error.
+      final cancelled = e.error.code == FailureCode.Canceled;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Stripe error: ${e.error.localizedMessage}')),
+        SnackBar(
+          content: Text(
+            cancelled
+                ? 'Payment cancelled. You can confirm again whenever you are ready.'
+                : '❌ ${e.error.localizedMessage ?? 'Payment failed. Please try again.'}',
+          ),
+        ),
       );
     } catch (e, st) {
       dlog('🔴 [Stripe] catch: $e\n$st');
@@ -848,28 +839,6 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Enter a location')));
       return;
-    }
-
-    if (_isNow) {
-      final hour = DateTime.now().hour;
-      if (hour < 7 || hour >= 23) {
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Outside working hours'),
-            content: const Text(
-              'ASAP jobs can only be started between 7:00 AM and 10:00 PM.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-        return;
-      }
     }
 
     if (_selectedLat == null || _selectedLng == null) {
