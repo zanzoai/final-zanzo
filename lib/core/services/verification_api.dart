@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // Core services
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/services/zancrew_api.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 class VerificationApi {
   static Uri _u(String path) => Uri.parse('${ApiService.baseUrl}$path');
@@ -196,7 +197,7 @@ class VerificationApi {
       if (debugForceVerifyBodyFlag) "debug_force_verify": true,
     };
 
-    print("📤 Unified verification payload: $payload");
+    dlog("📤 Unified verification payload: $payload");
 
     final headers = {
       ...await _h,
@@ -214,7 +215,7 @@ class VerificationApi {
     }
 
     final decoded = jsonDecode(res.body);
-    print("✅ Unified verification response: $decoded");
+    dlog("✅ Unified verification response: $decoded");
 
     return decoded as Map<String, dynamic>;
   }

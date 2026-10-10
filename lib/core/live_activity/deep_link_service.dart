@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 class DeepLinkService {
   DeepLinkService._();
@@ -40,7 +41,7 @@ class DeepLinkService {
       final initial = await _channel.invokeMethod<dynamic>('getInitialLink');
       if (initial != null) _route(_asMap(initial));
     } catch (e) {
-      debugPrint('DeepLinkService.getInitialLink failed: $e');
+      dlog('DeepLinkService.getInitialLink failed: $e');
     }
   }
 

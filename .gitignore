@@ -34,3 +34,7 @@ macos/Flutter/ephemeral/
 .DS_Store
 .flutter-plugins-dependencies
 .dart_tool/
+
+# Local build configuration with real environment values
+config/*.json
+!config/*.example.json

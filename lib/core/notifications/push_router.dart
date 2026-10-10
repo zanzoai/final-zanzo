@@ -23,6 +23,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/live_activity/deep_link_service.dart';
 import 'package:zanzo_frontend/core/notifications/chat_unread_store.dart';
 import 'package:zanzo_frontend/features/common/chat/chat_screen.dart';
+import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
+import 'package:zanzo_frontend/features/zancrew/screens/zancrew_offer_detail.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 /// Registered in main() via [FirebaseMessaging.onBackgroundMessage].
 /// Must be a top-level (or static) function. When a push carries a
@@ -75,19 +78,19 @@ class PushRouter {
         sound: false,
       );
     } catch (e) {
-      debugPrint('[PushRouter] permission/options setup failed: $e');
+      dlog('[PushRouter] permission/options setup failed: $e');
     }
 
     // Foreground pushes.
     FirebaseMessaging.onMessage.listen(
       (m) => _handle(m, opened: false),
-      onError: (e) => debugPrint('[PushRouter] onMessage error: $e'),
+      onError: (e) => dlog('[PushRouter] onMessage error: $e'),
     );
 
     // Tapped while the app was backgrounded.
     FirebaseMessaging.onMessageOpenedApp.listen(
       (m) => _handle(m, opened: true),
-      onError: (e) => debugPrint('[PushRouter] onMessageOpenedApp error: $e'),
+      onError: (e) => dlog('[PushRouter] onMessageOpenedApp error: $e'),
     );
 
     // Tapped from a fully terminated state (cold start).
@@ -95,7 +98,7 @@ class PushRouter {
       final initial = await FirebaseMessaging.instance.getInitialMessage();
       if (initial != null) _handle(initial, opened: true);
     } catch (e) {
-      debugPrint('[PushRouter] getInitialMessage error: $e');
+      dlog('[PushRouter] getInitialMessage error: $e');
     }
   }
 
@@ -114,10 +117,63 @@ class PushRouter {
         // if the crew isn't on the dashboard (which applies it live when it is).
         _persistCrewOnline(data['is_online'] == 'true');
         break;
-      // `new_offer` and `task_status_update` are handled elsewhere / TBD.
+      case 'task_status_update':
+        // Customer: a task moved on (assigned, arrived, completed …). The live
+        // screens already update over the WebSocket; a tap opens the task.
+        if (opened) _openTask(data);
+        break;
+      case 'new_offer':
+        // Crew: a new job offer nearby. A tap opens the offer.
+        if (opened) _openOffer(data);
+        break;
+      case 'task_cancelled':
+        // Crew: the task they were assigned was cancelled (e.g. by an admin).
+        _handleTaskCancelled(opened: opened);
+        break;
       default:
         break;
     }
+  }
+
+  void _openTask(Map<String, dynamic> data) {
+    final taskId = (data['task_id'] ?? '').toString().trim();
+    final nav = DeepLinkService.navigatorKey.currentState;
+    if (taskId.isEmpty || nav == null) return;
+    if (TrackJobScreen.isOpenForJob(taskId)) return; // already on it
+    nav.push(MaterialPageRoute(
+      builder: (_) => TrackJobScreen(
+        taskTitle: 'Your Zanzo task',
+        userLocation: '',
+        jobId: taskId,
+      ),
+    ));
+  }
+
+  void _openOffer(Map<String, dynamic> data) {
+    final offerId = (data['offer_id'] ?? '').toString().trim();
+    final nav = DeepLinkService.navigatorKey.currentState;
+    if (offerId.isEmpty || nav == null) return;
+    nav.push(MaterialPageRoute(
+      builder: (_) => CrewOfferDetail(offer: {
+        'offer_id': offerId,
+        'job_id': (data['task_id'] ?? '').toString(),
+      }),
+    ));
+  }
+
+  void _handleTaskCancelled({required bool opened}) {
+    final nav = DeepLinkService.navigatorKey.currentState;
+    final ctx = DeepLinkService.navigatorKey.currentContext;
+    // Leave whatever task screen is open: the job no longer exists for them.
+    if (opened && nav != null) nav.popUntil((route) => route.isFirst);
+    if (ctx == null || !ctx.mounted) return;
+    ScaffoldMessenger.maybeOf(ctx)
+      ?..clearSnackBars()
+      ..showSnackBar(const SnackBar(
+        content: Text('Your task was cancelled. No action is needed.'),
+        duration: Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+      ));
   }
 
   Future<void> _persistCrewOnline(bool isOnline) async {

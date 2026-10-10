@@ -7,6 +7,7 @@ import 'package:zanzo_frontend/core/widgets/error_state.dart';
 import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/features/user/screens/review_task_screen.dart';
 import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 
 class JobHistoryScreen extends StatefulWidget {
   const JobHistoryScreen({super.key});
@@ -368,16 +369,13 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
 
     // Amount
     final amount = job['estimated_amount'];
-    final currency = _safeStr(job['currency'], 'GBP').toUpperCase();
-    final symbol = currency == 'GBP'
-        ? '£'
-        : currency == 'INR'
-        ? '₹'
-        : currency;
-    final cost = (amount is num)
-        ? amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2)
+    final amountDisplay = (amount is num)
+        ? CurrencyFormatter.format(
+            amount,
+            _safeStr(job['currency'], 'GBP'),
+            compact: true,
+          )
         : '';
-    final amountDisplay = cost.isNotEmpty ? '$symbol$cost' : '';
 
     // Payment status (available after backend schema update)
     final payStatusLabel =

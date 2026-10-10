@@ -1,5 +1,5 @@
 // lib/core/services/task_events_ws_service.dart
-// WS /api/v1/ws/tasks/{task_id}?token=<jwt>
+// WS /api/v1/ws/tasks/{task_id}   (JWT sent as the 'bearer' subprotocol)
 // Live task status + crew location for the task owner (TrackJobScreen).
 // task.status_changed / crew.location
 
@@ -7,11 +7,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'api_service.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
 
 class TaskEventsWsService with ChangeNotifier {
   final String taskId;
@@ -65,23 +66,27 @@ class TaskEventsWsService with ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> _doConnect() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token') ?? '';
+    final token = await TokenStore.accessToken() ?? '';
     if (token.isEmpty) {
-      if (kDebugMode) print('[TaskEventsWS] no token — skipping connect');
+      if (kDebugMode) dlog('[TaskEventsWS] no token — skipping connect');
       return;
     }
 
     final wsUri =
-        Uri.parse(ApiService.wsBaseUrl('/api/v1/ws/tasks/$taskId'))
-            .replace(queryParameters: {'token': token});
+        Uri.parse(ApiService.wsBaseUrl('/api/v1/ws/tasks/$taskId'));
 
-    if (kDebugMode) print('[TaskEventsWS] connecting → $wsUri');
+    if (kDebugMode) dlog('[TaskEventsWS] connecting → $wsUri');
 
     try {
-      _channel = WebSocketChannel.connect(wsUri);
+      _channel = WebSocketChannel.connect(
+        wsUri,
+        // The token travels in the Sec-WebSocket-Protocol header ("bearer",
+        // <jwt>) rather than the URL, so it never lands in server or proxy
+        // access logs. The server answers with the "bearer" subprotocol.
+        protocols: ['bearer', token],
+      );
     } catch (e) {
-      if (kDebugMode) print('[TaskEventsWS] connect error: $e');
+      if (kDebugMode) dlog('[TaskEventsWS] connect error: $e');
       _scheduleReconnect();
       return;
     }
@@ -97,7 +102,7 @@ class TaskEventsWsService with ChangeNotifier {
       _onFrame,
       onDone: _onClosed,
       onError: (e) {
-        if (kDebugMode) print('[TaskEventsWS] stream error: $e');
+        if (kDebugMode) dlog('[TaskEventsWS] stream error: $e');
         _cleanupWs();
         _scheduleReconnect();
       },
@@ -120,14 +125,14 @@ class TaskEventsWsService with ChangeNotifier {
           _reconnectAttempts = 0;
           _status = data['status']?.toString();
           _notify();
-          if (kDebugMode) print('[TaskEventsWS] ✅ connected status=$_status');
+          if (kDebugMode) dlog('[TaskEventsWS] ✅ connected status=$_status');
           break;
         case 'task.status_changed':
           _status = data['status']?.toString();
           final note = data['note']?.toString();
           _notify();
           onStatusChanged?.call(_status ?? '', note);
-          if (kDebugMode) print('[TaskEventsWS] status→$_status note=$note');
+          if (kDebugMode) dlog('[TaskEventsWS] status→$_status note=$note');
           break;
         case 'crew.location':
           final lat = (data['lat'] as num?)?.toDouble();
@@ -142,18 +147,18 @@ class TaskEventsWsService with ChangeNotifier {
         case 'error':
           final code = data['code'] as int? ?? 0;
           if (kDebugMode) {
-            print('[TaskEventsWS] server error $code: ${data['message']}');
+            dlog('[TaskEventsWS] server error $code: ${data['message']}');
           }
           if (code == 4001) _handleTokenExpired();
           break;
       }
     } catch (e) {
-      if (kDebugMode) print('[TaskEventsWS] frame parse error: $e');
+      if (kDebugMode) dlog('[TaskEventsWS] frame parse error: $e');
     }
   }
 
   void _onClosed() {
-    if (kDebugMode) print('[TaskEventsWS] closed');
+    if (kDebugMode) dlog('[TaskEventsWS] closed');
     _cleanupWs();
     if (!_disposed) _scheduleReconnect();
   }
@@ -170,7 +175,7 @@ class TaskEventsWsService with ChangeNotifier {
     final delay = _backoff(_reconnectAttempts);
     _reconnectAttempts++;
     if (kDebugMode) {
-      print('[TaskEventsWS] reconnect in ${delay.inSeconds}s '
+      dlog('[TaskEventsWS] reconnect in ${delay.inSeconds}s '
           '(attempt $_reconnectAttempts)');
     }
     _reconnectTimer?.cancel();

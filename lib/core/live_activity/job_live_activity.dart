@@ -11,6 +11,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 class JobLiveActivity {
   JobLiveActivity._();
@@ -68,7 +69,7 @@ class JobLiveActivity {
         'overtime': overtime,
       });
     } catch (e) {
-      debugPrint('JobLiveActivity.start failed: $e');
+      dlog('JobLiveActivity.start failed: $e');
     }
   }
 
@@ -94,7 +95,7 @@ class JobLiveActivity {
         'overtime': overtime,
       });
     } catch (e) {
-      debugPrint('JobLiveActivity.update failed: $e');
+      dlog('JobLiveActivity.update failed: $e');
     }
   }
 
@@ -114,7 +115,7 @@ class JobLiveActivity {
         'crewName': crewName,
       });
     } catch (e) {
-      debugPrint('JobLiveActivity.end failed: $e');
+      dlog('JobLiveActivity.end failed: $e');
     }
   }
 }

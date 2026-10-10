@@ -16,6 +16,9 @@ import 'package:zanzo_frontend/core/services/auth.dart';
 import 'package:zanzo_frontend/core/widgets/location_selector.dart';
 // Screens
 import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 
 enum PaymentMethod { standard }
 
@@ -84,7 +87,23 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
   List<String> _importantNotes = [];
 
   double _estimatedCost = 0.0;
+  // Until the server's first quote arrives this is a guess from the user's
+  // saved country (India → INR, otherwise GBP); after that it is always the
+  // currency the server quoted / charged.
   String _currencyCode = 'GBP';
+  // Price of one 30-minute block for one person, from the server's quote, so
+  // later changes to people/duration can update the price instantly.
+  double? _pricePerBlock;
+  // Default per-block prices — only used if the server can't be reached.
+  static const _fallbackPerBlock = {'GBP': 7.80, 'INR': 150.0};
+
+  // A task created for a payment that was cancelled or failed. Retrying reuses
+  // it (instead of creating another task + PaymentIntent each time) as long as
+  // the details haven't changed; it is deleted if the user leaves unpaid.
+  String? _pendingJobId;
+  String? _pendingJobKey;
+  bool _paid = false;
+  int _costRequest = 0;
 
   double? _selectedLat;
   double? _selectedLng;
@@ -166,6 +185,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     _selectedLat = widget.initialLat;
     _selectedLng = widget.initialLng;
 
+    _currencyCode = CurrencyFormatter.userCurrency();
     _fetchEstimatedCost();
 
     // ========================= AUTO LOCATION PREFILL (GPS) =========================
@@ -177,6 +197,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
               final prefs = await SharedPreferences.getInstance();
               _selectedLat = pos.latitude;
               _selectedLng = pos.longitude;
+              if (mounted) _fetchEstimatedCost();
 
               String address;
 
@@ -219,6 +240,10 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
 
   @override
   void dispose() {
+    final abandoned = _pendingJobId;
+    if (abandoned != null && !_paid) {
+      ApiService.deleteUnpaidTask(abandoned); // fire and forget
+    }
     _taskController.dispose();
     _locationController.dispose();
     _pickupController.dispose();
@@ -423,34 +448,51 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     return const [];
   }
 
-  String get _currencySymbol => _currencyCode == 'GBP' ? '£' : '₹';
-  String _formatAmount(num amt) => '$_currencySymbol${amt.toStringAsFixed(2)}';
+  String _formatAmount(num amt) => CurrencyFormatter.format(amt, _currencyCode);
 
   String get _scheduleLabel {
     if (_scheduledAt == null) return "Schedule";
     return DateFormat("dd MMM, hh:mm a").format(_scheduledAt!);
   }
 
-  String get _countryParam => _currencyCode == 'GBP' ? 'UK' : 'IN';
-
   // ========================= COST CALC =========================
   Future<void> _fetchEstimatedCost() async {
+    final request = ++_costRequest;
     try {
       final safeDuration = double.parse(_durationHours.toStringAsFixed(1));
-      final totalMinutes = (safeDuration * 60).round();
-      final blocks = (totalMinutes / 30).ceil();
+      final blocks = ((safeDuration * 60).round() / 30).ceil();
 
-      // £7.80 per 30-min block (780 pence); stored in pounds for display
-      const ratePerBlockPence = 780;
-      final cost = (blocks * ratePerBlockPence * _peopleCount) / 100.0;
-
+      // Instant estimate from the server's own per-block price (or, before the
+      // first quote, the default price for the user's market)…
+      final perBlock =
+          _pricePerBlock ?? _fallbackPerBlock[_currencyCode] ?? 7.80;
       if (!mounted) return;
-      setState(() => _estimatedCost = cost);
+      setState(() => _estimatedCost = blocks * perBlock * _peopleCount);
+
+      // …then the server's quote. The server decides the country — from the
+      // task location when we have one, else the user's profile, else the UK —
+      // so the amount and currency match what the task will be charged.
+      if ((await TokenStore.accessToken()) == null) return;
+      final quote = await ApiService.calculateCost(
+        safeDuration,
+        people: _peopleCount,
+        lat: _selectedLat,
+        lng: _selectedLng,
+      );
+      final amount = (quote?['estimated_cost'] as num?)?.toDouble();
+      final currency = quote?['currency_code']?.toString();
+      final serverPerBlock = (quote?['price_per_block'] as num?)?.toDouble();
+      // Ignore a late answer to an older request (user kept changing values).
+      if (!mounted || request != _costRequest || amount == null) return;
+      setState(() {
+        _estimatedCost = amount;
+        if (currency != null && currency.isNotEmpty) {
+          _currencyCode = currency.toUpperCase();
+        }
+        if (serverPerBlock != null) _pricePerBlock = serverPerBlock;
+      });
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Cost calculation error: $e")));
+      dlog('cost estimate failed: $e');
     }
   }
 
@@ -539,9 +581,55 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     _fetchEstimatedCost();
   }
 
+  /// Message safe to show a customer: our own exceptions carry a readable
+  /// sentence; anything else (network, parsing) gets a generic one.
+  String _friendlyError(Object e) {
+    final text = e.toString().replaceFirst('Exception: ', '');
+    if (e is Exception && text.length < 140 && !text.contains('{')) return text;
+    return 'Payment could not be completed. Please try again.';
+  }
+
   int _toMinorUnits(double amount, String currency) => (amount * 100).round();
 
   // ========================= PAYMENT =========================
+  Map<String, dynamic> _jobPayload() {
+    final utcWhen = (_isNow ? DateTime.now() : (_scheduledAt ?? DateTime.now()))
+        .toUtc();
+    final notesText = _importantNotes.isEmpty
+        ? null
+        : _importantNotes.join(", ");
+    return {
+      "title": _conciseTitle,
+      "polished_task": _taskController.text,
+
+      // DELIVERY / RETURN ADDRESS
+      "location_address": _locationController.text,
+      "latitude": _selectedLat,
+      "longitude": _selectedLng,
+
+      // PICKUP FIELDS
+      "pickup_address": _hasPickup ? _pickupController.text : null,
+      "pickup_latitude": _hasPickup ? _pickupLat : null,
+      "pickup_longitude": _hasPickup ? _pickupLng : null,
+
+      // OTHER FIELDS (price and currency are set by the server)
+      "scheduled_at": utcWhen.toIso8601String(),
+      "duration_hours": _durationHours,
+      "people_required": _peopleCount,
+      "notes": notesText,
+      "actions": _actions,
+      "tags": _tags,
+    };
+  }
+
+  /// Identifies "the same task" across payment retries. An ASAP task's
+  /// timestamp changes every attempt, so it is left out of the key.
+  String _jobKey(Map<String, dynamic> payload) {
+    final keyed = Map<String, dynamic>.from(payload);
+    if (_isNow) keyed.remove("scheduled_at");
+    return jsonEncode(keyed);
+  }
+
   Future<String> _createJob(Map<String, String> authHeaders) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('user_id');
@@ -550,53 +638,47 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       throw Exception("User not verified");
     }
 
-    final utcWhen = (_isNow ? DateTime.now() : (_scheduledAt ?? DateTime.now()))
-        .toUtc();
-    final scheduledAtIso = utcWhen.toIso8601String();
-
-    final notesText = _importantNotes.isEmpty
-        ? null
-        : _importantNotes.join(", ");
+    final payload = _jobPayload();
+    final key = _jobKey(payload);
+    if (_pendingJobId != null && _pendingJobKey == key) {
+      dlog('🔷 reusing unpaid task $_pendingJobId');
+      return _pendingJobId!;
+    }
+    // Details changed since the last attempt: drop the stale unpaid task.
+    if (_pendingJobId != null) {
+      ApiService.deleteUnpaidTask(_pendingJobId!);
+      _pendingJobId = null;
+    }
 
     final jobRes = await ApiService.callWithRefresh(
       (h) => http.post(
         Uri.parse("${ApiService.baseUrl}/tasks/"),
         headers: h,
-        body: jsonEncode({
-          "title": _conciseTitle,
-          "polished_task": _taskController.text,
-
-          // DELIVERY / RETURN ADDRESS
-          "location_address": _locationController.text,
-          "latitude": _selectedLat,
-          "longitude": _selectedLng,
-
-          // PICKUP FIELDS
-          "pickup_address": _hasPickup ? _pickupController.text : null,
-          "pickup_latitude": _hasPickup ? _pickupLat : null,
-          "pickup_longitude": _hasPickup ? _pickupLng : null,
-
-          // OTHER FIELDS
-          "scheduled_at": scheduledAtIso,
-          "duration_hours": _durationHours,
-          "people_required": _peopleCount,
-          "estimated_amount": _estimatedCost,
-          "currency": _currencyCode.toLowerCase(),
-          "notes": notesText,
-          "actions": _actions,
-          "tags": _tags,
-        }),
+        body: jsonEncode(payload),
       ),
     );
 
     if (jobRes.statusCode < 200 || jobRes.statusCode >= 300) {
-      throw Exception("Job creation failed: ${jobRes.body}");
+      throw Exception("Couldn't create the task (${jobRes.statusCode}). Please try again.");
     }
 
     final jobData = jsonDecode(jobRes.body) as Map<String, dynamic>;
     final jobId = jobData['id']?.toString();
+    if (jobId == null) throw Exception("Couldn't create the task. Please try again.");
 
-    if (jobId == null) throw Exception("No job_id returned");
+    _pendingJobId = jobId;
+    _pendingJobKey = key;
+    // Show the price the server set for this task.
+    final serverAmount = (jobData['estimated_amount'] as num?)?.toDouble();
+    final serverCurrency = jobData['currency']?.toString();
+    if (mounted && serverAmount != null) {
+      setState(() {
+        _estimatedCost = serverAmount;
+        if (serverCurrency != null && serverCurrency.isNotEmpty) {
+          _currencyCode = serverCurrency.toUpperCase();
+        }
+      });
+    }
     return jobId;
   }
 
@@ -606,22 +688,22 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     String? jobId;
 
     try {
-      print('🔷 [Stripe] requireSignIn...');
+      dlog('🔷 [Stripe] requireSignIn...');
       final signedIn = await Auth.requireSignIn(context);
       if (!signedIn) {
-        print('🔷 [Stripe] user not signed in — aborting');
+        dlog('🔷 [Stripe] user not signed in — aborting');
         setState(() => _isProcessing = false);
         return;
       }
 
       final authHeaders = await ApiService.authHeaders();
 
-      print('🔷 [Stripe] creating job...');
+      dlog('🔷 [Stripe] creating job...');
       jobId = await _createJob(authHeaders);
-      print('🔷 [Stripe] job created: $jobId');
+      dlog('🔷 [Stripe] job created: $jobId');
 
       final amountPence = _toMinorUnits(_estimatedCost, _currencyCode);
-      print(
+      dlog(
         '🔷 [Stripe] POST create-payment-intent amount=$amountPence currency=${_currencyCode.toLowerCase()} job=$jobId',
       );
 
@@ -637,7 +719,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         ),
       );
 
-      print(
+      dlog(
         '🔷 [Stripe] payment-intent response: ${payRes.statusCode} ${payRes.body}',
       );
 
@@ -651,16 +733,16 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       final customerSessionClientSecret =
           payData['customer_session_client_secret'] as String?;
 
-      print(
+      dlog(
         '🔷 [Stripe] clientSecret present: ${clientSecret != null} prefix: ${clientSecret?.toString().substring(0, 20)}',
       );
-      print('🔷 [Stripe] customerId: $customerId');
+      dlog('🔷 [Stripe] customerId: $customerId');
 
       if (clientSecret == null) {
         throw Exception("No client_secret returned");
       }
 
-      print('🔷 [Stripe] calling initPaymentSheet...');
+      dlog('🔷 [Stripe] calling initPaymentSheet...');
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: clientSecret,
@@ -671,7 +753,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
           customerSessionClientSecret: customerSessionClientSecret,
         ),
       );
-      print(
+      dlog(
         '🟡 [Stripe] initPaymentSheet complete — clearing loading state before present',
       );
       // iOS: native sheet presentation fails silently if Flutter is mid-frame rebuild.
@@ -679,9 +761,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       setState(() => _isProcessing = false);
       await Future.delayed(const Duration(milliseconds: 50));
 
-      print('🔷 [Stripe] presentPaymentSheet — isProcessing=$_isProcessing');
+      dlog('🔷 [Stripe] presentPaymentSheet — isProcessing=$_isProcessing');
       await Stripe.instance.presentPaymentSheet();
-      print('🟢 [Stripe] presentPaymentSheet completed successfully');
+      dlog('🟢 [Stripe] presentPaymentSheet completed successfully');
 
       // Show post-payment overlay while stripe-authorized call and navigation settle.
       if (mounted) setState(() => _postPayment = true);
@@ -696,15 +778,28 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
           body: jsonEncode({"task_id": jobId}),
         ),
       );
-      print(
+      dlog(
         '🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}',
       );
 
+      // The card is authorised either way (the sheet succeeded), so the task
+      // is no longer "abandoned" — don't delete it on leaving the screen.
+      _paid = true;
+      _pendingJobId = null;
+      final confirmed = authResp.statusCode >= 200 && authResp.statusCode < 300;
+
       if (!mounted) return;
 
+      // Only claim success when the server confirmed the authorisation. If it
+      // couldn't yet, Stripe's webhook will move the task on shortly.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Payment Successful • Job #${jobId.substring(0, 8)}'),
+          content: Text(
+            confirmed
+                ? '✅ Payment successful • Job #${jobId.substring(0, 8)}'
+                : 'Payment received — confirming it now. Your task will start '
+                    'searching for help as soon as it is confirmed.',
+          ),
         ),
       );
 
@@ -719,7 +814,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         ),
       );
     } on StripeException catch (e) {
-      print(
+      dlog(
         '🔴 [Stripe] StripeException: code=${e.error.code} message=${e.error.localizedMessage} declineCode=${e.error.declineCode}',
       );
       if (!mounted) return;
@@ -727,11 +822,11 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         SnackBar(content: Text('❌ Stripe error: ${e.error.localizedMessage}')),
       );
     } catch (e, st) {
-      print('🔴 [Stripe] catch: $e\n$st');
+      dlog('🔴 [Stripe] catch: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('❌ Payment failed: $e')));
+      ).showSnackBar(SnackBar(content: Text('❌ ${_friendlyError(e)}')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -768,7 +863,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     }
 
     if (_selectedLat == null || _selectedLng == null) {
-      print('🔴 [Stripe] lat/lng missing from state — blocking payment');
+      dlog('🔴 [Stripe] lat/lng missing from state — blocking payment');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -780,7 +875,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       return;
     }
 
-    print(
+    dlog(
       '🔷 [Stripe] lat/lng OK (lat=$_selectedLat lng=$_selectedLng) — starting Stripe flow',
     );
     await _startStripeFlow();
@@ -1676,6 +1771,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
                               _locationController.text = address;
                               _selectedLat = lat;
                               _selectedLng = lng;
+                              // The task's country (and so its currency)
+                              // follows its location — re-quote.
+                              _fetchEstimatedCost();
 
                               final prefs =
                                   await SharedPreferences.getInstance();

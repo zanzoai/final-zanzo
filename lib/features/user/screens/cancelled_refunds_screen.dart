@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/widgets/error_state.dart';
 import 'package:zanzo_frontend/core/widgets/skeleton.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 
 const _kBg = Color(0xFFFCFAF6);
 const _kInk = Color(0xFF26211C);
@@ -73,17 +74,11 @@ class _CancelledRefundsScreenState extends State<CancelledRefundsScreen> {
   String _amount(Map<String, dynamic> j) {
     final amount = j['estimated_amount'];
     if (amount == null) return '';
-    final currency = (j['currency'] as String? ?? 'GBP').toUpperCase();
-    final symbol = currency == 'GBP'
-        ? '£'
-        : currency == 'INR'
-        ? '₹'
-        : currency;
-    final n = amount as num;
-    final formatted = n == n.truncateToDouble()
-        ? n.toStringAsFixed(0)
-        : n.toStringAsFixed(2);
-    return '$symbol$formatted';
+    return CurrencyFormatter.format(
+      amount as num,
+      j['currency'] as String?,
+      compact: true,
+    );
   }
 
   String _date(Map<String, dynamic> j) {
