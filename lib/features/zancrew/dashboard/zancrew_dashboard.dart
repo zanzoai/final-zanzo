@@ -504,9 +504,10 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
     _locationTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       try {
+        // Bounded so a missing GPS fix can't pile up waiting calls every 15 s.
         final pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
-        );
+        ).timeout(const Duration(seconds: 12));
 
         if (_crewUserId == null) return;
 

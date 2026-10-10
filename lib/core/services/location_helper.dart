@@ -3,6 +3,8 @@
 
 // lib/core/services/location_helper.dart
 
+import 'dart:async';
+
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -39,10 +41,19 @@ class LocationHelper {
       );
     }
 
-    // Return accurate GPS position
-    final position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+    // Accurate GPS position — but never wait forever: indoors or with a weak
+    // signal a fix may never arrive, which left callers (e.g. the sign-in
+    // dialog) spinning indefinitely. Fall back to the last known position.
+    Position position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      ).timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last == null) rethrow;
+      position = last;
+    }
 
     // Notify backend to reverse-geocode and embed country_code in JWT.
     // Only runs if authenticated; errors are swallowed so they never block callers.
