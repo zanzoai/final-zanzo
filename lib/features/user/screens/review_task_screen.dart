@@ -659,7 +659,16 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     );
 
     if (jobRes.statusCode < 200 || jobRes.statusCode >= 300) {
-      throw Exception("Couldn't create the task (${jobRes.statusCode}). Please try again.");
+      // Show the server's reason (e.g. outside 07:00–22:00 local hours)
+      // when it sent a short, readable one.
+      String? detail;
+      try {
+        final d = jsonDecode(jobRes.body)['detail'];
+        if (d is String && d.isNotEmpty && d.length < 140) detail = d;
+      } catch (_) {}
+      throw Exception(
+        detail ?? "Couldn't create the task (${jobRes.statusCode}). Please try again.",
+      );
     }
 
     final jobData = jsonDecode(jobRes.body) as Map<String, dynamic>;
@@ -720,7 +729,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       );
 
       dlog(
-        '🔷 [Stripe] payment-intent response: ${payRes.statusCode} ${payRes.body}',
+        '🔷 [Stripe] payment-intent response: ${payRes.statusCode} ${redactBody(payRes.body)}',
       );
 
       if (payRes.statusCode < 200 || payRes.statusCode >= 300) {
@@ -779,7 +788,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
         ),
       );
       dlog(
-        '🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${authResp.body}',
+        '🔷 [Stripe] stripe-authorized response: ${authResp.statusCode} ${redactBody(authResp.body)}',
       );
 
       // The card is authorised either way (the sheet succeeded), so the task

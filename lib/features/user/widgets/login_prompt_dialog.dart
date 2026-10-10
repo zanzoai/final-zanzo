@@ -206,7 +206,9 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
           await TokenStore.save(refresh: refresh);
         }
 
-        await prefs.setString('zancrew_status', 'pending');
+        // Unknown until the crew profile loads — "off" (not a crew member)
+        // rather than "pending", which showed for customers and approved crew.
+        await prefs.setString('zancrew_status', 'off');
         await prefs.setBool('zancrew_enabled', false);
 
         final backendEmail = (user['email'] as String?)?.trim();

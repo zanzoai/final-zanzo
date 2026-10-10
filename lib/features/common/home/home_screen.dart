@@ -427,7 +427,12 @@ class _HomeScreenState extends State<HomeScreen>
 
     try {
       final profile = await ZanCrewApi.getProfile(userId);
-      if (profile == null) return;
+      if (profile == null) {
+        // No crew profile: not a crew member.
+        await prefs.setString('zancrew_status', 'off');
+        await prefs.setBool('zancrew_enabled', false);
+        return;
+      }
 
       final status = (profile['status'] as String?) ?? 'pending';
       final active = status == 'active';

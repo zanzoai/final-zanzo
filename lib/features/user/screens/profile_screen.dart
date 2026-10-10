@@ -95,13 +95,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _refreshZanCrew(SharedPreferences prefs, String uid) async {
     try {
       final profile = await ZanCrewApi.getProfile(uid);
-      if (profile != null) {
+      if (profile == null) {
+        // No crew profile: not a crew member.
+        await prefs.setString('zancrew_status', 'off');
+      } else {
         await prefs.setString('zancrew_status', profile['status'] ?? 'off');
-        await prefs.setStringList(
-          'zancrew_buckets',
-          (profile['buckets'] as List?)?.map((e) => e.toString()).toList() ??
-              <String>[],
-        );
+        // The API sends buckets as comma-separated text; older builds sent a
+        // list. Casting the text to a List threw and skipped the rest.
+        final rawBuckets = profile['buckets'];
+        final buckets = rawBuckets is List
+            ? rawBuckets.map((e) => e.toString()).toList()
+            : (rawBuckets?.toString() ?? '')
+                .split(',')
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
+        await prefs.setStringList('zancrew_buckets', buckets);
         await prefs.setBool(
           'zancrew_bank_verified',
           profile['bank_verified'] ?? false,
