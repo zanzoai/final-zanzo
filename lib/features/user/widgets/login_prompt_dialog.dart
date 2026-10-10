@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/services/location_helper.dart';
 import 'package:zanzo_frontend/core/services/token_store.dart';
+import 'package:zanzo_frontend/core/services/zancrew_api.dart';
 import 'package:zanzo_frontend/core/utils/market.dart';
 
 enum _Step { phone, otp, name }
@@ -206,10 +207,17 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
           await TokenStore.save(refresh: refresh);
         }
 
-        // Unknown until the crew profile loads — "off" (not a crew member)
-        // rather than "pending", which showed for customers and approved crew.
-        await prefs.setString('zancrew_status', 'off');
-        await prefs.setBool('zancrew_enabled', false);
+        // Real crew status straight away, so the profile and the home "Work"
+        // toggle are right from the first frame. No crew profile → "off".
+        // Bounded: a slow network must not hold up sign-in.
+        var crewStatus = 'off';
+        try {
+          final crew = await ZanCrewApi.getProfile(userId)
+              .timeout(const Duration(seconds: 5));
+          crewStatus = (crew?['status'] as String?) ?? 'off';
+        } catch (_) {}
+        await prefs.setString('zancrew_status', crewStatus);
+        await prefs.setBool('zancrew_enabled', crewStatus == 'active');
 
         final backendEmail = (user['email'] as String?)?.trim();
         if (backendEmail != null && backendEmail.isNotEmpty) {
