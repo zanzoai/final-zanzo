@@ -77,6 +77,10 @@ class TaskChatWsService with ChangeNotifier {
         // access logs. The server answers with the "bearer" subprotocol.
         protocols: ['bearer', token],
       );
+      // A failed handshake is reported through `ready` as well as the
+      // stream; the stream's onError already logs and reconnects, so only
+      // stop `ready` from surfacing as an unhandled exception.
+      _channel!.ready.then<void>((_) {}, onError: (_) {});
     } catch (e) {
       if (kDebugMode) dlog('[TaskChatWS] connect error: $e');
       _scheduleReconnect();

@@ -803,6 +803,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
             taskTitle: _conciseTitle,
             userLocation: _locationController.text,
             jobId: jobId,
+            justPaid: true,
           ),
         ),
       );

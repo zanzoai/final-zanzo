@@ -1916,6 +1916,8 @@ class _CustomerActiveTaskBanner extends StatelessWidget {
 
   String get _statusText {
     switch (rawStatus) {
+      case 'searching':
+        return 'Finding a ZanCrew partner';
       case 'assigned':
         return 'ZanCrew accepted your task';
       case 'travelling':
