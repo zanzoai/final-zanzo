@@ -1,4 +1,6 @@
 // lib/core/utils/log.dart
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 /// Debug-only logging. In release builds this does nothing, so request
@@ -33,4 +35,14 @@ Object? redact(Object? value) {
   }
   if (value is List) return value.map(redact).toList();
   return value;
+}
+
+/// A JSON response body with sensitive values masked, for debug logs.
+/// Non-JSON bodies are returned with any Stripe client secret masked.
+String redactBody(String body) {
+  try {
+    return jsonEncode(redact(jsonDecode(body)));
+  } catch (_) {
+    return body.replaceAll(RegExp(r'_secret_[A-Za-z0-9]+'), '_secret_***');
+  }
 }
