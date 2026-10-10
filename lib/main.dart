@@ -1,11 +1,13 @@
 // lib/main.dart
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/config/app_config.dart';
 import 'core/live_activity/deep_link_service.dart';
 import 'core/notifications/push_router.dart';
 import 'core/theme/app_theme.dart';
@@ -18,6 +20,7 @@ import 'features/user/screens/account_data_screen.dart';
 import 'features/user/screens/cancelled_refunds_screen.dart';
 import 'features/user/screens/job_history_screen.dart';
 import 'features/user/screens/profile_screen.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,21 +33,30 @@ Future<void> main() async {
   // Background/terminated push handler must be registered before runApp.
   FirebaseMessaging.onBackgroundMessage(firebasePushBackgroundHandler);
 
+  final missing = AppConfig.missingKeys;
+  if (missing.isNotEmpty) {
+    throw StateError(
+      'Missing build config: ${missing.join(', ')}. '
+      'Run with --dart-define-from-file=config/test.json (see config/README.md).',
+    );
+  }
+
   // ---------------------------
-  // 🔐 Stripe Publishable Key
+  // 🔐 Stripe publishable key (see lib/core/config/app_config.dart)
   // ---------------------------
-  Stripe.publishableKey =
-      'pk_test_51RoCgkCZAx8jHGm1MXdhkXh2GnMMcOH9UT3jwUjSkYpP3jtiHJUA6Y4BcIyNBOAqtai1r7FYmpwA8MxZt6rMLpME007ktJPeeH';
+  // The user's market (UK default / India) for local display conventions.
+  await Market.load();
+
+  Stripe.publishableKey = AppConfig.stripePublishableKey;
   await Stripe.instance.applySettings();
 
   // ---------------------------
-  // 🟧 Supabase Initialization
+  // 🟧 Supabase (realtime updates + legacy chat images)
   // ---------------------------
   await Supabase.initialize(
-    url: 'https://hfgoixompxqymezvjllk.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmZ29peG9tcHhxeW1lenZqbGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ2MDI2MDgsImV4cCI6MjA3MDE3ODYwOH0.E_T-W4MNpVN0AnGkQdIzvEeWtgXoDDKXlFL8P-H3ba0',
-    debug: true, // keep ON during development
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabaseAnonKey,
+    debug: kDebugMode,
   );
 
   runApp(const MyApp());

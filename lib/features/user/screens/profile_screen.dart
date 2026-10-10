@@ -13,6 +13,7 @@ import 'package:zanzo_frontend/features/user/screens/job_history_screen.dart';
 import 'package:zanzo_frontend/features/user/widgets/add_email_dialog.dart';
 import 'package:zanzo_frontend/features/user/widgets/change_phone_dialog.dart';
 import 'package:zanzo_frontend/features/user/widgets/login_prompt_dialog.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -561,7 +562,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               action: (_email?.isNotEmpty ?? false) ? 'Edit' : 'Add',
               onTap: () async {
                 final prefs = await SharedPreferences.getInstance();
-                final token = prefs.getString('access_token');
+                final token = await TokenStore.accessToken();
                 if (token == null) return _signIn();
                 final result = await showAddEmailDialog(
                   context,

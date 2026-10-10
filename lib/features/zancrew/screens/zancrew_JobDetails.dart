@@ -33,6 +33,7 @@ import 'package:zanzo_frontend/features/common/chat/chat_screen.dart';
 
 import '../../../core/services/api_service.dart';
 import '../../../core/widgets/payment_chip.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 
 class CrewJobDetail extends StatefulWidget {
   final String jobId;
@@ -487,13 +488,7 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
         final v = (amount is num)
             ? amount.toDouble()
             : double.parse(amount.toString());
-        final symbol = (currency == 'GBP')
-            ? '£'
-            : (currency == 'INR')
-            ? '₹'
-            : '£';
-        final isWhole = v.truncateToDouble() == v;
-        return '$symbol${v.toStringAsFixed(isWhole ? 0 : 2)} est.';
+        return '${CurrencyFormatter.format(v, currency, compact: true)} est.';
       } catch (_) {}
     }
     return '';

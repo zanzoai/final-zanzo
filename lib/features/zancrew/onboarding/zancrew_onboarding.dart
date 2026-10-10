@@ -21,6 +21,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/zancrew_api.dart';
 import '../dashboard/zancrew_dashboard.dart';
 import 'uk_work_status_screen.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class ZanCrewOnboarding extends StatefulWidget {
   /// If true → user is editing existing prefs instead of first-time setup.
@@ -319,7 +320,7 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
                   ),
                 ),
                 Text(
-                  '${_radius.round()} km',
+                  Market.radius(_radius, precise: true),
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -341,7 +342,7 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
                 min: 1,
                 max: 50,
                 divisions: 49,
-                label: '${_radius.round()} km',
+                label: Market.radius(_radius, precise: true),
                 value: _radius,
                 onChanged: (v) => setState(() => _radius = v),
               ),

@@ -16,12 +16,12 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // ⭐ Supabase for realtime
 import 'package:zanzo_frontend/core/services/zancrew_earnings_service.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 import 'package:zanzo_frontend/core/widgets/error_state.dart';
 import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 
@@ -33,6 +33,8 @@ import '../onboarding/uk_bank_details_screen.dart';
 import '../screens/zancrew_JobDetails.dart';
 import '../screens/zancrew_earnings_details.dart';
 import '../screens/zancrew_offer_detail.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class ZanCrewDashboard extends StatefulWidget {
   const ZanCrewDashboard({super.key});
@@ -65,6 +67,8 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   Timer? _locationTimer;
 
   double _todayEarnings = 0;
+  // Currency of the crew member's market, from the earnings API (GBP default).
+  String _earningsCurrency = 'GBP';
 
   String? _activeJobId;
   String? _activeJobTitle;
@@ -128,7 +132,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _online && _crewUserId != null) {
-      debugPrint('[ZanCrew] app resumed — refreshing offers');
+      dlog('[ZanCrew] app resumed — refreshing offers');
       _refreshOffers(status: 'offered');
       _checkActiveJob();
     }
@@ -140,16 +144,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   void _initFcmOpenListeners() {
     // Notification tapped while app was in background
     _fcmOpenedSub = FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      debugPrint('[FCM] notification opened app — refreshing offers');
+      dlog('[FCM] notification opened app — refreshing offers');
       if (_online && _crewUserId != null) {
         _refreshOffers(status: 'offered');
       }
-    }, onError: (e) => debugPrint('[FCM] onMessageOpenedApp error: $e'));
+    }, onError: (e) => dlog('[FCM] onMessageOpenedApp error: $e'));
 
     // Notification tapped when app was fully terminated (cold start)
     FirebaseMessaging.instance.getInitialMessage().then((message) {
       if (message != null) {
-        debugPrint('[FCM] launched from notification tap — refreshing offers');
+        dlog('[FCM] launched from notification tap — refreshing offers');
         if (_online && _crewUserId != null) {
           _refreshOffers(status: 'offered');
         }
@@ -160,16 +164,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     _fcmForegroundSub = FirebaseMessaging.onMessage.listen((message) {
       final type = message.data['type'];
       if (type == 'new_offer' && _online && mounted) {
-        debugPrint('[FCM] foreground new_offer — refreshing offers');
+        dlog('[FCM] foreground new_offer — refreshing offers');
         _refreshOffers(status: 'offered', showLoading: false);
       } else if (type == 'crew_status_changed') {
         // Admin force-offline twin of the WS crew.status_changed event.
         // FCM values are strings ("true"/"false").
         final isOnline = message.data['is_online'] == 'true';
-        debugPrint('[FCM] crew_status_changed is_online=$isOnline');
+        dlog('[FCM] crew_status_changed is_online=$isOnline');
         if (!isOnline) _applyForcedOffline();
       }
-    }, onError: (e) => debugPrint('[FCM] onMessage error: $e'));
+    }, onError: (e) => dlog('[FCM] onMessage error: $e'));
   }
 
   // ---------------------------------------------------------------------------
@@ -246,14 +250,14 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       newToken,
     ) async {
       final prefix = newToken.length >= 8 ? newToken.substring(0, 8) : '???';
-      debugPrint('[FCM] token refreshed token=$prefix…');
+      dlog('[FCM] token refreshed token=$prefix…');
       final platform = Platform.isIOS
           ? 'ios'
           : Platform.isAndroid
           ? 'android'
           : 'unknown';
       await ApiService.registerDeviceToken(token: newToken, platform: platform);
-    }, onError: (e) => debugPrint('[FCM] onTokenRefresh error: $e'));
+    }, onError: (e) => dlog('[FCM] onTokenRefresh error: $e'));
   }
 
   /// Request notification permission (iOS shows system dialog; Android 13+ also shows dialog).
@@ -266,12 +270,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         sound: true,
       );
       if (settings.authorizationStatus == AuthorizationStatus.denied) {
-        debugPrint('[FCM] notification permission denied');
+        dlog('[FCM] notification permission denied');
         return;
       }
       await _registerCurrentFcmToken();
     } catch (e) {
-      debugPrint('[FCM] _requestFcmPermissionAndRegister error: $e');
+      dlog('[FCM] _requestFcmPermissionAndRegister error: $e');
     }
   }
 
@@ -284,28 +288,28 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         for (int i = 0; i < 5; i++) {
           apns = await FirebaseMessaging.instance.getAPNSToken();
           if (apns != null) break;
-          debugPrint(
+          dlog(
             '[FCM] APNS token not ready, attempt ${i + 1}/5 — retrying in 1s…',
           );
           await Future.delayed(const Duration(seconds: 1));
         }
         if (apns == null) {
-          debugPrint(
+          dlog(
             '[FCM] APNS token still null after 5 attempts — skipping FCM registration',
           );
           return;
         }
         final apnsPrefix = apns.length >= 8 ? apns.substring(0, 8) : '???';
-        debugPrint('[FCM] APNS token ready apns=$apnsPrefix…');
+        dlog('[FCM] APNS token ready apns=$apnsPrefix…');
       }
 
       final token = await FirebaseMessaging.instance.getToken();
       if (token == null) {
-        debugPrint('[FCM] getToken() returned null');
+        dlog('[FCM] getToken() returned null');
         return;
       }
       final prefix = token.length >= 8 ? token.substring(0, 8) : '???';
-      debugPrint('[FCM] got token=$prefix…');
+      dlog('[FCM] got token=$prefix…');
       final platform = Platform.isIOS
           ? 'ios'
           : Platform.isAndroid
@@ -313,7 +317,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
           : 'unknown';
       await ApiService.registerDeviceToken(token: token, platform: platform);
     } catch (e) {
-      debugPrint('[FCM] _registerCurrentFcmToken error: $e');
+      dlog('[FCM] _registerCurrentFcmToken error: $e');
     }
   }
 
@@ -570,7 +574,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       Position? pos = await Geolocator.getLastKnownPosition();
 
       if (pos == null) {
-        debugPrint(
+        dlog(
           '[ZanCrew] no last known position — trying current (medium)',
         );
         pos = await Geolocator.getCurrentPosition(
@@ -579,16 +583,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       }
 
       if (pos == null) {
-        debugPrint('[ZanCrew] pre-online: no position available');
+        dlog('[ZanCrew] pre-online: no position available');
         return;
       }
 
       if (pos.latitude == 0.0 && pos.longitude == 0.0) {
-        debugPrint('[ZanCrew] pre-online: ignoring (0,0) coordinates');
+        dlog('[ZanCrew] pre-online: ignoring (0,0) coordinates');
         return;
       }
 
-      debugPrint(
+      dlog(
         '[ZanCrew] pre-online location: ${pos.latitude},${pos.longitude}',
       );
       await ApiService.postCrewLocationUpdate(
@@ -597,7 +601,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         lng: pos.longitude,
       );
     } catch (e) {
-      debugPrint('[ZanCrew] pre-online location push failed (non-fatal): $e');
+      dlog('[ZanCrew] pre-online location push failed (non-fatal): $e');
     }
   }
 
@@ -607,7 +611,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       try {
         final serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (!serviceEnabled) {
-          debugPrint('[ZanCrew] location service disabled');
+          dlog('[ZanCrew] location service disabled');
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -626,7 +630,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         }
         if (perm == LocationPermission.denied ||
             perm == LocationPermission.deniedForever) {
-          debugPrint('[ZanCrew] location permission denied: $perm');
+          dlog('[ZanCrew] location permission denied: $perm');
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -640,9 +644,9 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
           return;
         }
 
-        debugPrint('[ZanCrew] location permission ok: $perm');
+        dlog('[ZanCrew] location permission ok: $perm');
       } catch (e) {
-        debugPrint('[ZanCrew] location check error: $e');
+        dlog('[ZanCrew] location check error: $e');
         // Non-fatal: permission check itself failed — allow online and let
         // the location timer handle retries gracefully.
       }
@@ -801,9 +805,13 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     try {
       final result = await ZanCrewEarningsService.getEarnings(_crewUserId!);
       final todayPaise = result["today_paise"] ?? 0;
+      final currency = result["currency"]?.toString();
 
       setState(() {
         _todayEarnings = todayPaise / 100;
+        if (currency != null && currency.isNotEmpty) {
+          _earningsCurrency = currency.toUpperCase();
+        }
       });
     } catch (_) {
       // ignore for MVP
@@ -863,8 +871,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
     try {
       final v = (p is num) ? p.toDouble() : double.parse(p.toString());
-      final whole = v.truncateToDouble();
-      return '£${v.toStringAsFixed(whole == v ? 0 : 2)}';
+      return CurrencyFormatter.format(
+        v,
+        o['currency']?.toString() ?? _earningsCurrency,
+        compact: true,
+      );
     } catch (_) {
       return '';
     }
@@ -876,11 +887,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
     try {
       final v = (d is num) ? d.toDouble() : double.parse(d.toString());
-      if (v < 1.0) {
-        final meters = (v * 1000).round();
-        return '$meters m';
-      }
-      return '${v.toStringAsFixed(1)} km';
+      return Market.distance(v);
     } catch (_) {
       return '';
     }
@@ -986,7 +993,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                             max: 50,
                             divisions: 49,
                             activeColor: _accent,
-                            label: '${tempRadius.toStringAsFixed(0)} km',
+                            label: Market.radius(tempRadius, precise: true),
                             onChanged: (v) => setLocal(() => tempRadius = v),
                           ),
                         ),
@@ -1608,9 +1615,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // EARNINGS CARD
   // ---------------------------------------------------------------------------
   Widget _buildEarningsCard(BuildContext context) {
-    final todayLabel = _todayEarnings <= 0
-        ? '£0'
-        : '£${_todayEarnings.toStringAsFixed(_todayEarnings.truncateToDouble() == _todayEarnings ? 0 : 2)}';
+    final todayLabel = CurrencyFormatter.format(
+      _todayEarnings < 0 ? 0 : _todayEarnings,
+      _earningsCurrency,
+      compact: true,
+    );
 
     return InkWell(
       borderRadius: BorderRadius.circular(18),

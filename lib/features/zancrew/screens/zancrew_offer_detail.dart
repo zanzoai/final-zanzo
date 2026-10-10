@@ -21,6 +21,8 @@ import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/payment_chip.dart';
 import '../onboarding/uk_bank_details_screen.dart';
 import 'zancrew_JobDetails.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class CrewOfferDetail extends StatefulWidget {
   final Map<String, dynamic> offer;
@@ -75,11 +77,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
 
     try {
       final dd = (d is num) ? d.toDouble() : double.parse(d.toString());
-      if (dd < 1.0) {
-        final meters = (dd * 1000).round();
-        return '$meters m';
-      }
-      return '${dd.toStringAsFixed(1)} km';
+      return Market.distance(dd);
     } catch (_) {
       return '';
     }
@@ -100,14 +98,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
         final p = (paise is num)
             ? paise.toDouble()
             : double.parse(paise.toString());
-        final rupees = p / 100.0;
-        final symbol = (currency == 'INR')
-            ? '₹'
-            : (currency == 'GBP')
-            ? '£'
-            : '£';
-        final isWhole = rupees.truncateToDouble() == rupees;
-        return '$symbol${rupees.toStringAsFixed(isWhole ? 0 : 2)} est.';
+        return '${CurrencyFormatter.formatMinor(p, currency, compact: true)} est.';
       } catch (_) {}
     }
 
@@ -116,13 +107,8 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
     if (raw == null) return '';
     try {
       final v = (raw is num) ? raw.toDouble() : double.parse(raw.toString());
-      final symbol = (currency == 'INR')
-          ? '₹'
-          : (currency == 'GBP')
-          ? '£'
-          : '£';
       if (raw is String && RegExp(r'[₹£]').hasMatch(raw)) return raw;
-      return '$symbol${v.toStringAsFixed(2)} est.';
+      return '${CurrencyFormatter.format(v, currency)} est.';
     } catch (_) {
       return raw.toString();
     }

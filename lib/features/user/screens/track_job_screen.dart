@@ -16,6 +16,7 @@ import 'package:zanzo_frontend/core/notifications/push_router.dart';
 import 'package:zanzo_frontend/core/services/zancrew_api.dart';
 import 'package:zanzo_frontend/features/common/chat/chat_screen.dart';
 import 'package:zanzo_frontend/features/common/reviews/crew_reviews.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 class TrackJobScreen extends StatefulWidget {
   final String taskTitle;
@@ -358,7 +359,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         _loadCrewRating();
       }
     } catch (e) {
-      debugPrint('[track] assignee fetch error: $e');
+      dlog('[track] assignee fetch error: $e');
     }
   }
 
@@ -377,7 +378,7 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
         _crewCount = (c is num) ? c.round() : (int.tryParse('$c') ?? 0);
       });
     } catch (e) {
-      debugPrint('[track] crew rating fetch error: $e');
+      dlog('[track] crew rating fetch error: $e');
     }
   }
 

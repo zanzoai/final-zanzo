@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
 
 class UkProviderApi {
   static String get _base => ApiService.baseUrl;
@@ -68,8 +68,7 @@ class UkProviderApi {
     required String documentType,
     required File file,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await TokenStore.accessToken();
     if (token == null || token.isEmpty) throw Exception('Not signed in');
 
     final uri = Uri.parse('$_base/uk/provider/documents/upload')

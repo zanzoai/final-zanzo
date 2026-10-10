@@ -14,6 +14,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/services/location_helper.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 enum _Step { phone, otp, name }
 
@@ -184,13 +186,24 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
         final userId = (user['id'] ?? '').toString();
         if (userId.isNotEmpty) await prefs.setString('user_id', userId);
 
+        // The user's market (UK / India), decided by the server.
+        final country = user['country_code']?.toString();
+        final region = user['region']?.toString();
+        if (country != null && country.isNotEmpty) {
+          await prefs.setString('country_code', country);
+        }
+        if (region != null && region.isNotEmpty) {
+          await prefs.setString('region', region);
+        }
+        Market.update(countryCode: country, region: region);
+
         final access = decoded['access_token']?.toString();
         final refresh = decoded['refresh_token']?.toString();
         if (access != null && access.isNotEmpty) {
-          await prefs.setString('access_token', access);
+          await TokenStore.save(access: access);
         }
         if (refresh != null && refresh.isNotEmpty) {
-          await prefs.setString('refresh_token', refresh);
+          await TokenStore.save(refresh: refresh);
         }
 
         await prefs.setString('zancrew_status', 'pending');
@@ -505,7 +518,11 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
             textInputAction: TextInputAction.done,
             autofocus: true,
             onSubmitted: (_) => _sending ? null : _sendOtp(),
-            decoration: _inputDeco('Number', '7700 123456'),
+            // Example number in the selected country's format.
+            decoration: _inputDeco(
+              'Number',
+              _prefix == '+91' ? '98765 43210' : '7700 900123',
+            ),
           ),
         ),
       ],

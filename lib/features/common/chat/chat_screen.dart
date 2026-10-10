@@ -314,7 +314,7 @@ class _ChatScreenState extends State<ChatScreen> {
   // 8) IMAGE BUBBLE + optional caption
   // ---------------------------------------------------------------------------
   Widget _buildImageBubble(ChatMessage m) {
-    final url = m.publicImageUrl();
+    final url = m.displayImageUrl();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

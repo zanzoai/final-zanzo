@@ -1,5 +1,5 @@
 // lib/core/services/task_chat_ws_service.dart
-// WS /api/v1/ws/tasks/{task_id}/messages?token=<jwt>
+// WS /api/v1/ws/tasks/{task_id}/messages   (JWT sent as the 'bearer' subprotocol)
 // The connected frame ships the full message history — no separate REST fetch needed.
 // message.new pushes incoming messages; sending still uses REST POST /messages/send.
 
@@ -7,12 +7,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'api_service.dart';
 import 'messages_api.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
 
 class TaskChatWsService with ChangeNotifier {
   final String taskId;
@@ -57,23 +58,27 @@ class TaskChatWsService with ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> _doConnect() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token') ?? '';
+    final token = await TokenStore.accessToken() ?? '';
     if (token.isEmpty) {
-      if (kDebugMode) print('[TaskChatWS] no token — skipping connect');
+      if (kDebugMode) dlog('[TaskChatWS] no token — skipping connect');
       return;
     }
 
     final wsUri =
-        Uri.parse(ApiService.wsBaseUrl('/api/v1/ws/tasks/$taskId/messages'))
-            .replace(queryParameters: {'token': token});
+        Uri.parse(ApiService.wsBaseUrl('/api/v1/ws/tasks/$taskId/messages'));
 
-    if (kDebugMode) print('[TaskChatWS] connecting → $wsUri');
+    if (kDebugMode) dlog('[TaskChatWS] connecting → $wsUri');
 
     try {
-      _channel = WebSocketChannel.connect(wsUri);
+      _channel = WebSocketChannel.connect(
+        wsUri,
+        // The token travels in the Sec-WebSocket-Protocol header ("bearer",
+        // <jwt>) rather than the URL, so it never lands in server or proxy
+        // access logs. The server answers with the "bearer" subprotocol.
+        protocols: ['bearer', token],
+      );
     } catch (e) {
-      if (kDebugMode) print('[TaskChatWS] connect error: $e');
+      if (kDebugMode) dlog('[TaskChatWS] connect error: $e');
       _scheduleReconnect();
       return;
     }
@@ -89,7 +94,7 @@ class TaskChatWsService with ChangeNotifier {
       _onFrame,
       onDone: _onClosed,
       onError: (e) {
-        if (kDebugMode) print('[TaskChatWS] stream error: $e');
+        if (kDebugMode) dlog('[TaskChatWS] stream error: $e');
         _cleanupWs();
         _scheduleReconnect();
       },
@@ -121,7 +126,7 @@ class TaskChatWsService with ChangeNotifier {
           }
           _notify();
           if (kDebugMode) {
-            print('[TaskChatWS] ✅ connected msgs=${_messages.length}');
+            dlog('[TaskChatWS] ✅ connected msgs=${_messages.length}');
           }
           break;
 
@@ -139,18 +144,18 @@ class TaskChatWsService with ChangeNotifier {
         case 'error':
           final code = data['code'] as int? ?? 0;
           if (kDebugMode) {
-            print('[TaskChatWS] server error $code: ${data['message']}');
+            dlog('[TaskChatWS] server error $code: ${data['message']}');
           }
           if (code == 4001) _handleTokenExpired();
           break;
       }
     } catch (e) {
-      if (kDebugMode) print('[TaskChatWS] frame parse error: $e');
+      if (kDebugMode) dlog('[TaskChatWS] frame parse error: $e');
     }
   }
 
   void _onClosed() {
-    if (kDebugMode) print('[TaskChatWS] closed');
+    if (kDebugMode) dlog('[TaskChatWS] closed');
     _cleanupWs();
     if (!_disposed) _scheduleReconnect();
   }
@@ -167,7 +172,7 @@ class TaskChatWsService with ChangeNotifier {
     final delay = _backoff(_reconnectAttempts);
     _reconnectAttempts++;
     if (kDebugMode) {
-      print('[TaskChatWS] reconnect in ${delay.inSeconds}s '
+      dlog('[TaskChatWS] reconnect in ${delay.inSeconds}s '
           '(attempt $_reconnectAttempts)');
     }
     _reconnectTimer?.cancel();

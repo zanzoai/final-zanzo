@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 class ProfilePhotoHelper {
   static final ImagePicker _picker = ImagePicker();
@@ -32,7 +33,7 @@ class ProfilePhotoHelper {
       final cropped = await _crop(file);
       return cropped ?? file;
     } catch (e) {
-      debugPrint('❌ captureFromCamera failed: $e');
+      dlog('❌ captureFromCamera failed: $e');
       return null;
     }
   }
@@ -58,7 +59,7 @@ class ProfilePhotoHelper {
       final cropped = await _crop(file);
       return cropped ?? file;
     } catch (e) {
-      debugPrint('❌ pickFromGallery failed: $e');
+      dlog('❌ pickFromGallery failed: $e');
       return null;
     }
   }
@@ -86,7 +87,7 @@ class ProfilePhotoHelper {
       if (cropped == null) return null;
       return File(cropped.path);
     } catch (e) {
-      debugPrint('❌ crop failed: $e');
+      dlog('❌ crop failed: $e');
       return null;
     }
   }

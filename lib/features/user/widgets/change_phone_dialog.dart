@@ -90,7 +90,8 @@ Future<String?> showChangePhoneDialog(
                     },
                     decoration: InputDecoration(
                       labelText: 'New phone number',
-                      hintText: '+447700123456',
+                      // UK or India number, in international format.
+                      hintText: '+447700900123 or +919876543210',
                       counterText: '',
                       labelStyle: const TextStyle(color: _kMuted, fontSize: 14),
                       hintStyle: TextStyle(

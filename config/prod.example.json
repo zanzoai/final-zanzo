@@ -1,0 +1,7 @@
+{
+  "API_BASE_URL": "https://api-staging.zanzo.ai/api/v1",
+  "STRIPE_PUBLISHABLE_KEY": "pk_live_REPLACE_ME",
+  "SUPABASE_URL": "https://REPLACE_ME.supabase.co",
+  "SUPABASE_ANON_KEY": "REPLACE_ME",
+  "GOOGLE_MAPS_KEY": "REPLACE_ME"
+}

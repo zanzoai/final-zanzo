@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/zancrew_api.dart';
 
 import 'uk_work_status_screen.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class ZanCrewPreferencesScreen extends StatefulWidget {
   const ZanCrewPreferencesScreen({super.key});
@@ -162,7 +163,7 @@ class _ZanCrewPreferencesScreenState extends State<ZanCrewPreferencesScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
-                      label: Text('$km km'),
+                      label: Text(Market.radius(km)),
                       selected: _radiusKm.round() == km,
                       onSelected: (_) {
                         setState(() => _radiusKm = km.toDouble());
@@ -178,7 +179,7 @@ class _ZanCrewPreferencesScreenState extends State<ZanCrewPreferencesScreen> {
                 min: 1,
                 max: 25,
                 divisions: 24,
-                label: '${_radiusKm.toStringAsFixed(0)} km',
+                label: Market.radius(_radiusKm, precise: true),
                 onChanged: (v) => setState(() => _radiusKm = v),
               ),
               Text(

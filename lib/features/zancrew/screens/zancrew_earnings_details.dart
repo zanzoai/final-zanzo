@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:zanzo_frontend/core/services/zancrew_earnings_service.dart';
 import 'package:zanzo_frontend/core/widgets/error_state.dart';
 import 'package:zanzo_frontend/core/widgets/skeleton.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 
 class ZanCrewEarningsDetailsScreen extends StatefulWidget {
   final String crewUserId;
@@ -70,7 +72,7 @@ class _ZanCrewEarningsDetailsScreenState
         _error = false;
       });
     } catch (e) {
-      debugPrint('Earnings load error: $e');
+      dlog('Earnings load error: $e');
       if (!mounted) return;
       setState(() {
         loading = false;
@@ -142,6 +144,9 @@ class _ZanCrewEarningsDetailsScreenState
     );
   }
 
+  // The crew member's market currency, sent with the earnings (GBP default).
+  String get _currency => data?['currency']?.toString() ?? 'GBP';
+
   Widget _todayEarningsCard() {
     final today = (data?['today_paise'] ?? 0) / 100;
 
@@ -164,7 +169,7 @@ class _ZanCrewEarningsDetailsScreenState
           ),
           const SizedBox(height: 6),
           Text(
-            '£${today.toStringAsFixed(2)}',
+            CurrencyFormatter.format(today, _currency),
             style: const TextStyle(
               fontSize: 42,
               fontWeight: FontWeight.w900,
@@ -219,7 +224,7 @@ class _ZanCrewEarningsDetailsScreenState
             Text(range, style: const TextStyle(fontSize: 13, color: _muted)),
           if (range.isNotEmpty) const SizedBox(height: 10),
           Text(
-            '£${week.toStringAsFixed(2)}',
+            CurrencyFormatter.format(week, _currency),
             style: const TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.w900,
@@ -256,7 +261,7 @@ class _ZanCrewEarningsDetailsScreenState
           ),
           const SizedBox(width: 8),
           Text(
-            '£${pending.toStringAsFixed(2)}',
+            CurrencyFormatter.format(pending, _currency),
             textAlign: TextAlign.right,
             style: const TextStyle(
               fontSize: 18,
@@ -323,7 +328,7 @@ class _ZanCrewEarningsDetailsScreenState
           ),
           const SizedBox(height: 4),
           Text(
-            '£${amount.toStringAsFixed(2)}',
+            CurrencyFormatter.format(amount, item['currency']?.toString() ?? _currency),
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,

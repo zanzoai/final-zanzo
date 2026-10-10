@@ -5,17 +5,22 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zanzo_frontend/core/config/app_config.dart';
+import 'package:zanzo_frontend/core/services/session.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class ApiService {
-  //static const String baseUrl =
-  //"https://zanzo-test-production.up.railway.app/api/v1";
-
-  static const String baseUrl = "https://api-test.zanzo.ai/api/v1";
+  /// Backend base URL — set at build time (lib/core/config/app_config.dart).
+  static const String baseUrl = AppConfig.apiBaseUrl;
 
   /// Shared HTTP client
   static final http.Client httpClient = http.Client();
 
-  static bool _refreshing = false;
+  /// The refresh in progress, if any. Requests that hit a 401 while a refresh
+  /// is running wait for it instead of failing.
+  static Future<bool>? _refreshInFlight;
 
   /// Common JSON headers
   static Map<String, String> get jsonHeaders => const {
@@ -31,24 +36,22 @@ class ApiService {
 
   /// Returns JSON headers merged with Authorization if an access_token exists.
   static Future<Map<String, String>> authHeaders() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await TokenStore.accessToken();
     if (token == null || token.isEmpty) return jsonHeaders;
     return {...jsonHeaders, 'Authorization': 'Bearer $token'};
   }
 
   /// Runs [request] with current auth headers.
-  /// On 401, refreshes tokens once and retries. Returns original 401 if
-  /// refresh fails or a refresh is already in progress.
+  /// On 401, refreshes the tokens (one shared refresh for all concurrent
+  /// callers) and retries once. Returns the original 401 if refresh fails.
   static Future<http.Response> callWithRefresh(
     Future<http.Response> Function(Map<String, String> headers) request,
   ) async {
     final res = await request(await authHeaders());
-    if (res.statusCode != 401 || _refreshing) return res;
-    _log('auth', '⚠️ 401 — attempting token refresh');
-    _refreshing = true;
-    final ok = await refreshToken();
-    _refreshing = false;
+    if (res.statusCode != 401) return res;
+    _log('auth', '⚠️ 401 — refreshing token');
+    final ok = await (_refreshInFlight ??=
+        refreshToken().whenComplete(() => _refreshInFlight = null));
     if (!ok) {
       _log('auth', '⚠️ refresh failed — propagating 401');
       return res;
@@ -58,8 +61,7 @@ class ApiService {
   }
 
   static void _log(String tag, Object msg) {
-    // ignore: avoid_print
-    print('[API][$tag] $msg');
+    dlog('[API][$tag] $msg');
   }
 
   static String _truncate(Object o, {int max = 800}) {
@@ -85,7 +87,7 @@ class ApiService {
     Map<String, String>? headers,
   }) {
     final payload = body is String ? body : jsonEncode(body);
-    _log('POST', '$url payload=$payload');
+    _log('POST', '$url payload=${jsonEncode(redact(body is String ? safeJsonDecode(body) : body))}');
 
     return httpClient
         .post(url, headers: headers ?? jsonHeaders, body: payload)
@@ -130,12 +132,9 @@ class ApiService {
       'longitude': longitude,
     };
 
-    // ignore: avoid_print
-    print('[API][process_task] baseUrl=$baseUrl');
-    // ignore: avoid_print
-    print('[API][process_task] POST $url');
-    // ignore: avoid_print
-    print('[API][process_task] body=${jsonEncode(payload)}');
+    dlog('[API][process_task] baseUrl=$baseUrl');
+    dlog('[API][process_task] POST $url');
+    dlog('[API][process_task] body=${jsonEncode(payload)}');
 
     try {
       final res = await callWithRefresh(
@@ -147,10 +146,8 @@ class ApiService {
         ),
       );
 
-      // ignore: avoid_print
-      print('[API][process_task] ← status=${res.statusCode}');
-      // ignore: avoid_print
-      print('[API][process_task] ← body=${_truncate(res.body)}');
+      dlog('[API][process_task] ← status=${res.statusCode}');
+      dlog('[API][process_task] ← body=${_truncate(res.body)}');
 
       if (res.statusCode != 200) {
         _log(
@@ -185,16 +182,14 @@ class ApiService {
 
       return (decoded is Map<String, dynamic>) ? decoded : null;
     } on TimeoutException {
-      // ignore: avoid_print
-      print('[API][process_task] ❌ TIMEOUT after 40s');
+      dlog('[API][process_task] ❌ TIMEOUT after 40s');
       return {
         "ok": false,
         "error_type": "timeout",
         "user_message": "Request timed out after 40 s. Please try again.",
       };
     } on SocketException catch (e) {
-      // ignore: avoid_print
-      print('[API][process_task] ❌ SOCKET ERROR: $e');
+      dlog('[API][process_task] ❌ SOCKET ERROR: $e');
       return {
         "ok": false,
         "error_type": "network",
@@ -462,7 +457,7 @@ class ApiService {
     required double lng,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await TokenStore.accessToken();
     if (token == null || token.isEmpty) {
       _log('setUserLocation', '⚠️ skipped — no access_token');
       return null;
@@ -492,10 +487,11 @@ class ApiService {
       final countryCode = body['country_code']?.toString();
 
       if (newToken != null && newToken.isNotEmpty) {
-        await prefs.setString('access_token', newToken);
+        await TokenStore.save(access: newToken);
       }
       if (countryCode != null && countryCode.isNotEmpty) {
         await prefs.setString('country_code', countryCode);
+        Market.update(countryCode: countryCode);
       }
 
       _log('setUserLocation', '✅ country_code=$countryCode');
@@ -562,10 +558,10 @@ class ApiService {
       final role = user?['role']?.toString() ?? 'user';
 
       if (access != null && access.isNotEmpty) {
-        await prefs.setString('access_token', access);
+        await TokenStore.save(access: access);
       }
       if (refresh != null && refresh.isNotEmpty) {
-        await prefs.setString('refresh_token', refresh);
+        await TokenStore.save(refresh: refresh);
       }
       if (userId != null && userId.isNotEmpty) {
         await prefs.setString('user_id', userId);
@@ -587,8 +583,7 @@ class ApiService {
   }
 
   static Future<bool> setLocation(double latitude, double longitude) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await TokenStore.accessToken();
 
     if (token == null || token.isEmpty) {
       _log('setLocation', '⚠️ skipped — no access_token');
@@ -621,7 +616,7 @@ class ApiService {
       }
 
       // Replace OTP token with geo-aware token
-      await prefs.setString('access_token', newAccessToken);
+      await TokenStore.save(access: newAccessToken);
 
       final countryCode = body['country_code']?.toString();
       final region = body['region']?.toString();
@@ -633,6 +628,10 @@ class ApiService {
       if (region != null && region.isNotEmpty) {
         await prefs.setString('region', region);
       }
+      Market.update(
+        countryCode: prefs.getString('country_code'),
+        region: prefs.getString('region'),
+      );
 
       _log(
         'setLocation',
@@ -690,21 +689,43 @@ class ApiService {
         .toList();
   }
 
-  // GET /tasks/calculate-cost/{duration_hours}?country=UK
+  // GET /tasks/calculate-cost/{duration_hours}?country=UK&people=N
+  // Same pricing the server charges with when the task is created.
   static Future<Map<String, dynamic>?> calculateCost(
     double durationHours, {
-    String country = 'UK',
+    int people = 1,
+    double? lat,
+    double? lng,
   }) async {
+    // The server works out the country (and currency) from the task location,
+    // else the user's profile, else the UK — the app never sends one.
     final hours = durationHours.toStringAsFixed(1);
-    final url = _u(
-      '/tasks/calculate-cost/$hours',
-    ).replace(queryParameters: {'country': country});
+    final url = _u('/tasks/calculate-cost/$hours').replace(
+      queryParameters: {
+        'people': '$people',
+        if (lat != null && lng != null) 'lat': '$lat',
+        if (lat != null && lng != null) 'lng': '$lng',
+      },
+    );
     try {
       final res = await callWithRefresh((h) => _get(url, headers: h));
       if (res.statusCode != 200) return null;
       return jsonDecode(res.body) as Map<String, dynamic>;
     } catch (_) {
       return null;
+    }
+  }
+
+  // DELETE /tasks/{id} — only allowed while the task is still unpaid.
+  // Used to clean up a task whose payment was abandoned. Best-effort.
+  static Future<void> deleteUnpaidTask(String taskId) async {
+    try {
+      await callWithRefresh(
+        (h) => httpClient.delete(_u('/tasks/$taskId'), headers: h)
+            .timeout(const Duration(seconds: 10)),
+      );
+    } catch (e) {
+      _log('deleteUnpaidTask', '⚠️ $e');
     }
   }
 
@@ -802,8 +823,7 @@ class ApiService {
   // POST /auth/refresh  →  { refresh_token }
   // Returns a new TokenPair and updates stored tokens.
   static Future<bool> refreshToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final refreshTok = prefs.getString('refresh_token');
+    final refreshTok = await TokenStore.refreshToken();
     if (refreshTok == null || refreshTok.isEmpty) {
       _log('refreshToken', '⚠️ no refresh_token stored');
       return false;
@@ -814,6 +834,13 @@ class ApiService {
         'refresh_token': refreshTok,
       }, timeout: const Duration(seconds: 15));
 
+      if (res.statusCode == 401) {
+        // The server rejected the refresh token (expired, revoked or account
+        // disabled): the session is over. Network errors don't end up here.
+        _log('refreshToken', '❌ refresh token rejected');
+        await Session.expire();
+        return false;
+      }
       if (res.statusCode < 200 || res.statusCode >= 300) {
         _log('refreshToken', '❌ HTTP ${res.statusCode}');
         return false;
@@ -824,10 +851,10 @@ class ApiService {
       final refresh = body['refresh_token']?.toString();
 
       if (access != null && access.isNotEmpty) {
-        await prefs.setString('access_token', access);
+        await TokenStore.save(access: access);
       }
       if (refresh != null && refresh.isNotEmpty) {
-        await prefs.setString('refresh_token', refresh);
+        await TokenStore.save(refresh: refresh);
       }
 
       _log('refreshToken', '✅ tokens refreshed');
@@ -841,9 +868,8 @@ class ApiService {
   // POST /auth/logout  →  { refresh_token }  (requires Bearer token)
   // Invalidates the refresh token on the server.
   static Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    final access = prefs.getString('access_token');
-    final refresh = prefs.getString('refresh_token');
+    final access = await TokenStore.accessToken();
+    final refresh = await TokenStore.refreshToken();
 
     if (access == null || refresh == null) return;
 
@@ -886,8 +912,7 @@ class ApiService {
     String? fullName,
     String? password,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await TokenStore.accessToken();
     if (token == null || token.isEmpty) return null;
 
     final payload = <String, dynamic>{
@@ -1047,8 +1072,7 @@ class ApiService {
   }
 
   static Future<http.Response> sendUpdatePhoneOtp(String newPhone) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await TokenStore.accessToken();
 
     if (token == null || token.isEmpty) {
       throw Exception("Missing access token");
@@ -1066,7 +1090,7 @@ class ApiService {
     String code,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await TokenStore.accessToken();
 
     if (token == null || token.isEmpty) {
       throw Exception("Missing access token");
@@ -1091,7 +1115,7 @@ class ApiService {
         final role = user?['role']?.toString();
 
         if (newToken != null && newToken.isNotEmpty) {
-          await prefs.setString('access_token', newToken);
+          await TokenStore.save(access: newToken);
         }
         if (userId != null && userId.isNotEmpty) {
           await prefs.setString('user_id', userId);
@@ -1121,8 +1145,7 @@ class ApiService {
     String? appVersion,
     String? deviceId,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final accessToken = prefs.getString('access_token');
+    final accessToken = await TokenStore.accessToken();
     if (accessToken == null || accessToken.isEmpty) {
       _log('fcm', '⚠️ registerDeviceToken skipped — no access_token');
       return false;
@@ -1175,7 +1198,7 @@ class ApiService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await TokenStore.accessToken();
 
     if (token == null || token.isEmpty) {
       throw Exception("Missing access token");
