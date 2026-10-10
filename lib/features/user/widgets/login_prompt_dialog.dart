@@ -216,11 +216,12 @@ class _LoginPromptDialogState extends State<_LoginPromptDialog> {
           await prefs.setString('user_email', backendEmail);
         }
 
-        // FCM + location: best-effort, non-blocking
+        // FCM + location: best-effort and truly non-blocking — sign-in must
+        // never wait for a GPS fix.
         unawaited(_registerFcmToken());
-        try {
-          await LocationHelper.getCurrentLocation();
-        } catch (_) {}
+        unawaited(
+          LocationHelper.getCurrentLocation().then<void>((_) {}).catchError((_) {}),
+        );
 
         final backendName = (user['full_name'] as String?)?.trim();
         if (backendName != null && backendName.isNotEmpty) {

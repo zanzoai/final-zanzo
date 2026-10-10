@@ -193,6 +193,7 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
     if (_locationController.text.trim().isEmpty && _selectedLat == null) {
       Future.microtask(() {
         Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best)
+            .timeout(const Duration(seconds: 10))
             .then((pos) async {
               final prefs = await SharedPreferences.getInstance();
               _selectedLat = pos.latitude;
