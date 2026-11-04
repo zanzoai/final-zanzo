@@ -126,6 +126,45 @@ class UkProviderApi {
     throw Exception('Failed to get bank details (${res.statusCode})');
   }
 
+  static Future<Map<String, dynamic>> submitVacationRequest({
+    required String startDate,
+    required String endDate,
+    String? documentKey,
+  }) async {
+    final body = <String, dynamic>{
+      'start_date': startDate,
+      'end_date': endDate,
+      if (documentKey != null) 'document_key': documentKey,
+    };
+    final res = await ApiService.callWithRefresh(
+      (h) => http.post(
+        Uri.parse('$_base/uk/provider/vacation-request'),
+        headers: h,
+        body: jsonEncode(body),
+      ),
+    );
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    Map<String, dynamic>? err;
+    try {
+      err = jsonDecode(res.body) as Map<String, dynamic>?;
+    } catch (_) {}
+    throw Exception(err?['detail'] ?? 'Failed to submit vacation request (${res.statusCode})');
+  }
+
+  static Future<List<Map<String, dynamic>>> getVacationRequests() async {
+    final res = await ApiService.callWithRefresh(
+      (h) => http.get(Uri.parse('$_base/uk/provider/vacation-requests'), headers: h),
+    );
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body);
+      if (data is List) return List<Map<String, dynamic>>.from(data);
+      return [];
+    }
+    throw Exception('Failed to get vacation requests (${res.statusCode})');
+  }
+
   static Future<Map<String, dynamic>> saveBankDetails({
     required String accountHolderName,
     required String sortCode,
