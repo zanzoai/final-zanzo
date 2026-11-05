@@ -14,9 +14,8 @@
     <!-- File picker: storage read on Android ≤12 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-    <!-- File picker: granular media permissions on Android 13+ -->
+    <!-- File picker: granular media permission on Android 13+ (images only; no video) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
     <application
         android:name="${applicationName}"
