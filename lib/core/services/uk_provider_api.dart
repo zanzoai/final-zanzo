@@ -31,7 +31,9 @@ class UkProviderApi {
     required bool termsAgreed,
     String? universityName,
     String? courseName,
+    String? courseLevel,
     String? visaExpiryDate,
+    int? otherEmploymentHoursPerWeek,
     String? applicantNotes,
   }) async {
     final body = <String, dynamic>{
@@ -46,7 +48,11 @@ class UkProviderApi {
     if (shareCode != null) body['share_code'] = shareCode;
     if (universityName != null) body['university_name'] = universityName;
     if (courseName != null) body['course_name'] = courseName;
+    if (courseLevel != null) body['course_level'] = courseLevel;
     if (visaExpiryDate != null) body['visa_expiry_date'] = visaExpiryDate;
+    if (otherEmploymentHoursPerWeek != null) {
+      body['other_employment_hours_per_week'] = otherEmploymentHoursPerWeek;
+    }
     if (applicantNotes != null) body['applicant_notes'] = applicantNotes;
 
     final res = await ApiService.callWithRefresh(
@@ -64,6 +70,19 @@ class UkProviderApi {
     throw Exception(err?['detail'] ?? 'Application failed (${res.statusCode})');
   }
 
+  /// Infer a [MediaType] from a file path extension.
+  static MediaType _mediaTypeFor(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.png')) return MediaType('image', 'png');
+    if (lower.endsWith('.pdf')) return MediaType('application', 'pdf');
+    if (lower.endsWith('.docx')) {
+      return MediaType('application',
+          'vnd.openxmlformats-officedocument.wordprocessingml.document');
+    }
+    if (lower.endsWith('.doc')) return MediaType('application', 'msword');
+    return MediaType('image', 'jpeg');
+  }
+
   static Future<Map<String, dynamic>> uploadDocument({
     required String documentType,
     required File file,
@@ -74,10 +93,7 @@ class UkProviderApi {
     final uri = Uri.parse('$_base/uk/provider/documents/upload')
         .replace(queryParameters: {'document_type': documentType});
 
-    final lowerPath = file.path.toLowerCase();
-    final mediaType = lowerPath.endsWith('.png')
-        ? MediaType('image', 'png')
-        : MediaType('image', 'jpeg');
+    final mediaType = _mediaTypeFor(file.path);
 
     final req = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $token'
@@ -108,6 +124,45 @@ class UkProviderApi {
       return jsonDecode(res.body) as Map<String, dynamic>;
     }
     throw Exception('Failed to get bank details (${res.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> submitVacationRequest({
+    required String startDate,
+    required String endDate,
+    String? documentKey,
+  }) async {
+    final body = <String, dynamic>{
+      'start_date': startDate,
+      'end_date': endDate,
+      if (documentKey != null) 'document_key': documentKey,
+    };
+    final res = await ApiService.callWithRefresh(
+      (h) => http.post(
+        Uri.parse('$_base/uk/provider/vacation-request'),
+        headers: h,
+        body: jsonEncode(body),
+      ),
+    );
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    Map<String, dynamic>? err;
+    try {
+      err = jsonDecode(res.body) as Map<String, dynamic>?;
+    } catch (_) {}
+    throw Exception(err?['detail'] ?? 'Failed to submit vacation request (${res.statusCode})');
+  }
+
+  static Future<List<Map<String, dynamic>>> getVacationRequests() async {
+    final res = await ApiService.callWithRefresh(
+      (h) => http.get(Uri.parse('$_base/uk/provider/vacation-requests'), headers: h),
+    );
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body);
+      if (data is List) return List<Map<String, dynamic>>.from(data);
+      return [];
+    }
+    throw Exception('Failed to get vacation requests (${res.statusCode})');
   }
 
   static Future<Map<String, dynamic>> saveBankDetails({

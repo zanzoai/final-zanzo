@@ -35,10 +35,8 @@ Future<void> main() async {
 
   final missing = AppConfig.missingKeys;
   if (missing.isNotEmpty) {
-    throw StateError(
-      'Missing build config: ${missing.join(', ')}. '
-      'Run with --dart-define-from-file=config/test.json (see config/README.md).',
-    );
+    runApp(_ConfigErrorApp(missing));
+    return;
   }
 
   // ---------------------------
@@ -111,6 +109,64 @@ class _MyAppState extends State<MyApp> {
         '/account_data': (_) => const AccountDataScreen(),
         '/cancelled_refunds': (_) => const CancelledRefundsScreen(),
       },
+    );
+  }
+}
+
+/// Shown instead of a silent splash freeze when required Dart defines are absent.
+/// Dismissed by rebuilding with the correct --dart-define-from-file flag.
+class _ConfigErrorApp extends StatelessWidget {
+  const _ConfigErrorApp(this.missing);
+  final List<String> missing;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFFFCFAF6),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Missing build config',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFB00020),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...missing.map(
+                  (k) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '• $k',
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Run with:\nflutter run \\\n  --dart-define-from-file=config/test.json\n\nor:\n  make iphone',
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    color: Color(0xFF444444),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -30,6 +30,7 @@ import '../../../core/services/crew_offers_ws_service.dart';
 import '../../../core/services/uk_provider_api.dart';
 import '../../../core/services/zancrew_api.dart';
 import '../onboarding/uk_bank_details_screen.dart';
+import '../screens/student_vacation_request_screen.dart';
 import '../screens/zancrew_JobDetails.dart';
 import '../screens/zancrew_earnings_details.dart';
 import '../screens/zancrew_offer_detail.dart';
@@ -73,6 +74,8 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   String? _activeJobId;
   String? _activeJobTitle;
   String? _activeJobStatus;
+
+  bool _isApprovedStudent = false;
 
   static const List<String> _defaultBucketCatalog = [
     'Delivery',
@@ -435,14 +438,20 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
         // UK refinement (non-India) — admin may have approved via Supabase
         // without updating the zan_crew row this device can see.
-        if (!_zancrewEnabled && !isIndia) {
+        if (!isIndia) {
           try {
             final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
-            if (ukStatus != null &&
-                ukStatus['provider_status'] == 'approved' &&
-                ukStatus['can_receive_offers'] == true) {
-              await prefs.setBool('zancrew_enabled', true);
-              if (mounted) setState(() => _zancrewEnabled = true);
+            if (ukStatus != null) {
+              final isApproved = ukStatus['provider_status'] == 'approved';
+              final canReceive = ukStatus['can_receive_offers'] == true;
+              final isStudent = ukStatus['declared_work_status'] == 'student_visa';
+              if (!_zancrewEnabled && isApproved && canReceive) {
+                await prefs.setBool('zancrew_enabled', true);
+                if (mounted) setState(() => _zancrewEnabled = true);
+              }
+              if (mounted) {
+                setState(() => _isApprovedStudent = isApproved && isStudent);
+              }
             }
           } catch (_) {}
         }
@@ -1009,6 +1018,40 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                       ],
                     ),
                     const SizedBox(height: 12),
+                    if (_isApprovedStudent) ...[
+                      const Divider(height: 24),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: _accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.beach_access_outlined, color: _accent, size: 20),
+                        ),
+                        title: const Text(
+                          'Request Vacation Work Hours',
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                        ),
+                        subtitle: const Text(
+                          'Apply to work above your term-time limit during holidays.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        trailing: const Icon(Icons.chevron_right, color: _muted),
+                        onTap: () {
+                          Navigator.pop(ctx, false);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const StudentVacationRequestScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 4),
                     Row(
                       children: [
                         TextButton(
