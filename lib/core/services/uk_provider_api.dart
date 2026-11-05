@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'api_service.dart';
-import 'package:zanzo_frontend/core/services/token_store.dart';
 
 class UkProviderApi {
   static String get _base => ApiService.baseUrl;
@@ -87,24 +86,21 @@ class UkProviderApi {
     required String documentType,
     required File file,
   }) async {
-    final token = await TokenStore.accessToken();
-    if (token == null || token.isEmpty) throw Exception('Not signed in');
-
     final uri = Uri.parse('$_base/uk/provider/documents/upload')
         .replace(queryParameters: {'document_type': documentType});
-
     final mediaType = _mediaTypeFor(file.path);
 
-    final req = http.MultipartRequest('POST', uri)
-      ..headers['Authorization'] = 'Bearer $token'
-      ..files.add(await http.MultipartFile.fromPath(
-        'file',
-        file.path,
-        contentType: mediaType,
-      ));
-
-    final streamed = await req.send();
-    final res = await http.Response.fromStream(streamed);
+    final res = await ApiService.callWithRefresh((headers) async {
+      final req = http.MultipartRequest('POST', uri)
+        ..headers.addAll(headers)
+        ..files.add(await http.MultipartFile.fromPath(
+          'file',
+          file.path,
+          contentType: mediaType,
+        ));
+      final streamed = await req.send().timeout(const Duration(seconds: 60));
+      return http.Response.fromStream(streamed);
+    });
 
     if (res.statusCode == 200 || res.statusCode == 201) {
       return jsonDecode(res.body) as Map<String, dynamic>;

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/uk_provider_api.dart';
@@ -260,7 +261,73 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
   // ---------------------------------------------------------------------------
   // EVIDENCE UPLOAD
   // ---------------------------------------------------------------------------
-  Future<void> _pickAndUploadEvidence() async {
+  static const _maxEvidenceBytes = 10 * 1024 * 1024; // 10 MB
+
+  void _showEvidencePicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: _border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined, color: _ink),
+                title: const Text(
+                  'Choose from Files',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: _ink),
+                ),
+                subtitle: const Text('PDF, DOCX, JPG, PNG',
+                    style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromFiles();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: _ink),
+                title: const Text(
+                  'Choose from Gallery',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: _ink),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined, color: _ink),
+                title: const Text(
+                  'Take Photo',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: _ink),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromCamera();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickFromFiles() async {
     FilePickerResult? result;
     try {
       result = await FilePicker.platform.pickFiles(
@@ -271,18 +338,71 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open file picker. Please try again.')),
+        const SnackBar(
+            content: Text('Could not open file picker. Please try again.')),
+      );
+      return;
+    }
+    if (result == null || result.files.isEmpty) return;
+    final pf = result.files.single;
+    if (pf.path == null) return;
+    await _uploadEvidence(File(pf.path!), pf.name);
+  }
+
+  Future<void> _pickFromGallery() async {
+    XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 90,
+        maxWidth: 2000,
+        maxHeight: 2000,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open gallery. Please try again.')),
+      );
+      return;
+    }
+    if (picked == null) return;
+    await _uploadEvidence(File(picked.path), picked.name);
+  }
+
+  Future<void> _pickFromCamera() async {
+    XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 90,
+        maxWidth: 2000,
+        maxHeight: 2000,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open camera. Please try again.')),
+      );
+      return;
+    }
+    if (picked == null) return;
+    await _uploadEvidence(File(picked.path), picked.name);
+  }
+
+  Future<void> _uploadEvidence(File file, String name) async {
+    final size = await file.length();
+    if (size > _maxEvidenceBytes) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('File is too large. Maximum size is 10 MB.')),
       );
       return;
     }
 
-    if (result == null || result.files.isEmpty) return;
-    final pf = result.files.single;
-    if (pf.path == null) return;
-
     setState(() {
-      _evidenceFile = File(pf.path!);
-      _evidenceFileName = pf.name;
+      _evidenceFile = file;
+      _evidenceFileName = name;
       _evidenceStatus = _EvidenceStatus.uploading;
       _evidenceError = null;
     });
@@ -290,7 +410,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
     try {
       await UkProviderApi.uploadDocument(
         documentType: 'term_time_evidence',
-        file: _evidenceFile!,
+        file: file,
       );
       if (!mounted) return;
       setState(() => _evidenceStatus = _EvidenceStatus.done);
@@ -298,7 +418,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
       if (!mounted) return;
       setState(() {
         _evidenceStatus = _EvidenceStatus.failed;
-        _evidenceError = 'Upload failed. Please try again.';
+        _evidenceError = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -418,7 +538,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: _pickAndUploadEvidence,
+                  onPressed: _showEvidencePicker,
                   icon: const Icon(Icons.refresh, size: 16),
                   label: const Text('Change'),
                   style: TextButton.styleFrom(
@@ -450,7 +570,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
               width: double.infinity,
               height: 44,
               child: OutlinedButton.icon(
-                onPressed: _pickAndUploadEvidence,
+                onPressed: _showEvidencePicker,
                 icon: const Icon(Icons.upload_file_outlined, size: 18),
                 label: Text(_evidenceFile == null
                     ? 'Choose File'

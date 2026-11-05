@@ -90,13 +90,14 @@ class _UkDocumentUploadScreenState extends State<UkDocumentUploadScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
       setState(() {
         if (docType == 'passport_photo') {
           _passportStatus = _DocStatus.failed;
-          _passportError = 'Upload failed. Please try again.';
+          _passportError = msg;
         } else {
           _selfieStatus = _DocStatus.failed;
-          _selfieError = 'Upload failed. Please try again.';
+          _selfieError = msg;
         }
       });
     }

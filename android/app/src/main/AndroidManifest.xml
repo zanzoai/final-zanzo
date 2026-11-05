@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Required for push notifications on Android 13+ (API 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- File picker: storage read on Android ≤12 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <!-- File picker: granular media permission on Android 13+ (images only; no video) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
     <application
         android:name="${applicationName}"
