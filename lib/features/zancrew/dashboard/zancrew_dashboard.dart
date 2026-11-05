@@ -435,26 +435,27 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
             if (mounted) setState(() => _zancrewEnabled = true);
           }
         } catch (_) {}
-
-        // UK refinement (non-India) — admin may have approved via Supabase
-        // without updating the zan_crew row this device can see.
-        if (!isIndia) {
-          try {
-            final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
-            if (ukStatus != null) {
-              final isApproved = ukStatus['provider_status'] == 'approved';
-              final canReceive = ukStatus['can_receive_offers'] == true;
-              final isStudent = ukStatus['declared_work_status'] == 'student_visa';
-              if (!_zancrewEnabled && isApproved && canReceive) {
-                await prefs.setBool('zancrew_enabled', true);
-                if (mounted) setState(() => _zancrewEnabled = true);
-              }
-              if (mounted) {
-                setState(() => _isApprovedStudent = isApproved && isStudent);
-              }
+      }
+      // UK provider status is fetched on every launch (not gated on
+      // !_zancrewEnabled) so that _isApprovedStudent is always correct after
+      // admin approval — including on second and subsequent launches once
+      // zancrew_enabled is already true in SharedPreferences.
+      if (!isIndia && _crewUserId != null) {
+        try {
+          final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
+          if (ukStatus != null) {
+            final isApproved = ukStatus['provider_status'] == 'approved';
+            final canReceive = ukStatus['can_receive_offers'] == true;
+            final isStudent = ukStatus['declared_work_status'] == 'student_visa';
+            if (!_zancrewEnabled && isApproved && canReceive) {
+              await prefs.setBool('zancrew_enabled', true);
+              if (mounted) setState(() => _zancrewEnabled = true);
             }
-          } catch (_) {}
-        }
+            if (mounted) {
+              setState(() => _isApprovedStudent = isApproved && isStudent);
+            }
+          }
+        } catch (_) {}
       }
       if (mounted) await _maybeShowActivationBanner();
     }());
@@ -930,10 +931,10 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       builder: (ctx) {
         return Padding(
           padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom,
           ),
           child: StatefulBuilder(
             builder: (ctx, setLocal) {
@@ -943,30 +944,39 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Drag handle
                     Center(
                       child: Container(
                         width: 36,
                         height: 4,
-                        margin: const EdgeInsets.only(bottom: 12),
+                        margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: Colors.black26,
+                          color: _border,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
+                    // Title
                     const Text(
                       'Edit Preferences',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
+                        color: _ink,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Section: Categories
+                    const Text(
+                      'CATEGORIES',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _muted,
+                        letterSpacing: 0.7,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Text(
-                      'Categories',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -975,8 +985,17 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                         return FilterChip(
                           label: Text(b),
                           selected: selected,
-                          selectedColor: _accent.withValues(alpha: 0.15),
+                          selectedColor: _accent.withValues(alpha: 0.14),
                           checkmarkColor: _accent,
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                            color: selected ? _accent.withValues(alpha: 0.5) : _border,
+                          ),
+                          labelStyle: TextStyle(
+                            color: selected ? _accent : _ink,
+                            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                            fontSize: 13,
+                          ),
                           onSelected: (v) {
                             setLocal(() {
                               if (v) {
@@ -989,74 +1008,144 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Radius (km)',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
+                    const SizedBox(height: 20),
+                    // Section: Radius
                     Row(
                       children: [
-                        Expanded(
-                          child: Slider(
-                            value: tempRadius.clamp(1, 50),
-                            min: 1,
-                            max: 50,
-                            divisions: 49,
-                            activeColor: _accent,
-                            label: Market.radius(tempRadius, precise: true),
-                            onChanged: (v) => setLocal(() => tempRadius = v),
+                        const Text(
+                          'RADIUS',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _muted,
+                            letterSpacing: 0.7,
                           ),
                         ),
-                        SizedBox(
-                          width: 48,
-                          child: Text(
-                            tempRadius.toStringAsFixed(0),
-                            textAlign: TextAlign.right,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                        const Spacer(),
+                        Text(
+                          Market.radius(tempRadius, precise: true),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _accent,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                        activeTrackColor: _accent,
+                        inactiveTrackColor: _border,
+                        thumbColor: _accent,
+                        overlayColor: _accent.withValues(alpha: 0.12),
+                      ),
+                      child: Slider(
+                        value: tempRadius.clamp(1, 50),
+                        min: 1,
+                        max: 50,
+                        divisions: 49,
+                        label: Market.radius(tempRadius, precise: true),
+                        onChanged: (v) => setLocal(() => tempRadius = v),
+                      ),
+                    ),
+                    // Student Visa vacation entry
                     if (_isApprovedStudent) ...[
-                      const Divider(height: 24),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: _accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.beach_access_outlined, color: _accent, size: 20),
+                      const SizedBox(height: 8),
+                      const Divider(height: 1, color: _border),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'STUDENT VISA',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _muted,
+                          letterSpacing: 0.7,
                         ),
-                        title: const Text(
-                          'Request Vacation Work Hours',
-                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                        ),
-                        subtitle: const Text(
-                          'Apply to work above your term-time limit during holidays.',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        trailing: const Icon(Icons.chevron_right, color: _muted),
-                        onTap: () {
-                          Navigator.pop(ctx, false);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const StudentVacationRequestScreen(),
+                      ),
+                      const SizedBox(height: 10),
+                      Material(
+                        color: _surface,
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () {
+                            Navigator.pop(ctx, false);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const StudentVacationRequestScreen(),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.beach_access_outlined,
+                                    color: _accent,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Request Vacation Work Hours',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                          color: _ink,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Apply to work above your term-time limit during holidays.',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: _muted,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: _muted,
+                                  size: 18,
+                                ),
+                              ],
                             ),
-                          );
-                        },
+                          ),
+                        ),
                       ),
                     ],
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 20),
+                    // Actions
+                    const Divider(height: 1, color: _border),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel'),
+                          style: TextButton.styleFrom(foregroundColor: _muted),
+                          child: const Text('Cancel',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
                         ElevatedButton(
@@ -1066,11 +1155,15 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _accent,
                             foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 28, vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text('Save'),
+                          child: const Text('Save',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
                         ),
                       ],
                     ),
