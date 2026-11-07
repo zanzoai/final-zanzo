@@ -94,8 +94,26 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
   // Price of one 30-minute block for one person, from the server's quote, so
   // later changes to people/duration can update the price instantly.
   double? _pricePerBlock;
-  // Default per-block prices — only used if the server can't be reached.
-  static const _fallbackPerBlock = {'GBP': 7.80, 'INR': 150.0};
+  // Fallback per-block rate for India only (flat rate, matches backend default).
+  static const _fallbackPerBlockInr = 150.0;
+  // UK tiered pricing fallback (pence) — mirrors backend uk_pricing settings defaults.
+  // Block 1 = £17.99, block 2 adds £10.00, each subsequent block adds £11.00.
+  static const _ukTier1 = 1799; // pence
+  static const _ukTier2 = 1000;
+  static const _ukTierN = 1100;
+
+  static double _fallbackUkPricePounds(int blocks, int people) {
+    if (blocks <= 0 || people <= 0) return 0;
+    final int perPerson;
+    if (blocks == 1) {
+      perPerson = _ukTier1;
+    } else if (blocks == 2) {
+      perPerson = _ukTier1 + _ukTier2;
+    } else {
+      perPerson = _ukTier1 + _ukTier2 + (blocks - 2) * _ukTierN;
+    }
+    return (perPerson * people) / 100.0;
+  }
 
   // A task created for a payment that was cancelled or failed. Retrying reuses
   // it (instead of creating another task + PaymentIntent each time) as long as
@@ -463,12 +481,20 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       final safeDuration = double.parse(_durationHours.toStringAsFixed(1));
       final blocks = ((safeDuration * 60).round() / 30).ceil();
 
-      // Instant estimate from the server's own per-block price (or, before the
-      // first quote, the default price for the user's market)…
-      final perBlock =
-          _pricePerBlock ?? _fallbackPerBlock[_currencyCode] ?? 7.80;
+      // Instant estimate before the server responds: UK uses tiered pricing,
+      // India uses flat per-block rate.
       if (!mounted) return;
-      setState(() => _estimatedCost = blocks * perBlock * _peopleCount);
+      final double instantEstimate;
+      if (_currencyCode == 'INR') {
+        final perBlock = _pricePerBlock ?? _fallbackPerBlockInr;
+        instantEstimate = blocks * perBlock * _peopleCount;
+      } else {
+        // UK (GBP): tiered formula. After the first server quote, _pricePerBlock
+        // holds the first-block price — but re-using it linearly would
+        // undercount subsequent blocks, so we always use the tiered formula.
+        instantEstimate = _fallbackUkPricePounds(blocks, _peopleCount);
+      }
+      setState(() => _estimatedCost = instantEstimate);
 
       // …then the server's quote. The server decides the country — from the
       // task location when we have one, else the user's profile, else the UK —
