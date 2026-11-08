@@ -295,7 +295,19 @@ class _ZanCrewEarningsDetailsScreenState
   }
 
   Widget _jobCard(Map<String, dynamic> item) {
-    final amount = (item['crew_amount_paise'] ?? 0) / 100;
+    final engagementType = item['engagement_type'] as String?;
+    final agreedWage = item['agreed_wage_pence'] as int?;
+    final crewAmountPaise = item['crew_amount_paise'] as int? ?? 0;
+
+    // UK workers (paye/independent) have an agreed_wage_pence negotiated per task.
+    // Legacy India rows (engagement_type=null) fall back to crew_amount_paise.
+    final int minorUnits =
+        (engagementType == 'paye' || engagementType == 'independent') &&
+            agreedWage != null
+        ? agreedWage
+        : crewAmountPaise;
+    final amount = minorUnits / 100;
+
     final title = item['concise_title'] ?? 'Task Completed';
     final address = item['location_address'] ?? '';
     final status = item['payout_status'] ?? '';
@@ -318,17 +330,38 @@ class _ZanCrewEarningsDetailsScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: _ink,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: _ink,
+                  ),
+                ),
+              ),
+              if (engagementType == 'paye')
+                _engagementBadge(
+                  'PAYE',
+                  Colors.amber.shade700,
+                  Colors.amber.shade50,
+                )
+              else if (engagementType == 'independent')
+                _engagementBadge(
+                  'Independent',
+                  Colors.blue.shade600,
+                  Colors.blue.shade50,
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
-            CurrencyFormatter.format(amount, item['currency']?.toString() ?? _currency),
+            CurrencyFormatter.format(
+              amount,
+              item['currency']?.toString() ?? _currency,
+            ),
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
@@ -365,6 +398,24 @@ class _ZanCrewEarningsDetailsScreenState
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _engagementBadge(String label, Color text, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: text,
+        ),
       ),
     );
   }
