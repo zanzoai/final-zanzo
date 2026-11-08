@@ -178,6 +178,31 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
   String get _importantNotes =>
       (_job?['important_notes'] ?? _offer['important_notes'] ?? '').toString();
 
+  // --- Phase 1: PAYE / engagement type ---
+
+  /// "paye" | "independent" | null
+  String? get _engagementType =>
+      (_job?['engagement_type'] ?? _offer['engagement_type'])?.toString();
+
+  /// Estimated PAYE basic wage in pence (null for independent/India workers).
+  double? get _payeEstimatedWagePence {
+    final v = _job?['paye_estimated_wage_pence'] ?? _offer['paye_estimated_wage_pence'];
+    if (v == null) return null;
+    try {
+      return (v is num) ? v.toDouble() : double.parse(v.toString());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Basic pay estimate label. Excludes holiday pay and net pay (pending JMK confirmation).
+  String get _payeWageLabel {
+    final pence = _payeEstimatedWagePence;
+    if (pence == null || pence <= 0) return '';
+    final pounds = pence / 100.0;
+    return '~£${pounds.toStringAsFixed(2)} basic pay only (holiday pay pending JMK)';
+  }
+
   // -----------------------------------------------------------------------------
   // Lifecycle, API calls, distance refresh, Google Maps, Accept / Reject logic
   // -----------------------------------------------------------------------------
@@ -700,6 +725,19 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                             if (_bucket.isNotEmpty) _tag(_bucket),
                           ],
                         ),
+                        // PAYE workers see their estimated basic wage (£14/hr × duration)
+                        // below the customer's total price.
+                        if (_engagementType == 'paye' && _payeWageLabel.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _payeWageLabel,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFF16A34A),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 8),
 
                         Align(
