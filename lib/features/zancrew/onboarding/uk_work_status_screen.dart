@@ -1,7 +1,6 @@
 // lib/features/zancrew/onboarding/uk_work_status_screen.dart
 import 'package:flutter/material.dart';
 import 'uk_apply_screen.dart';
-import 'uk_student_blocked_screen.dart';
 
 class UkWorkStatusScreen extends StatelessWidget {
   const UkWorkStatusScreen({super.key});
@@ -25,38 +24,35 @@ class UkWorkStatusScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'We are legally required to verify your right to work in the UK before you can earn as an independent provider.',
+                'We are legally required to verify your right to work in the UK before you can earn with Zanzo.',
                 style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 28),
-              _StatusTile(
+              const _StatusTile(
                 title: 'British / Irish citizen',
                 subtitle: 'UK or Irish passport holder',
                 value: 'british_irish',
                 requiresShareCode: false,
               ),
-              _StatusTile(
+              const _StatusTile(
                 title: 'EU Settled or Pre-Settled Status',
                 subtitle: 'EUSS granted — provide GOV.UK share code',
                 value: 'settled_pre_settled',
                 requiresShareCode: true,
               ),
-              _StatusTile(
+              const _StatusTile(
                 title: 'Graduate Visa',
                 subtitle: 'Post-study work visa — provide GOV.UK share code',
                 value: 'graduate_visa',
                 requiresShareCode: true,
               ),
-              _StatusTile(
+              const _StatusTile(
                 title: 'Skilled Worker or other visa',
                 subtitle: 'Provide GOV.UK share code for right to work',
                 value: 'skilled_worker_or_other',
                 requiresShareCode: true,
               ),
-              _BlockedTile(
-                title: 'Student Visa',
-                subtitle: 'Not permitted for independent provider work',
-              ),
+              _StudentTile(),
             ],
           ),
         ),
@@ -100,27 +96,33 @@ class _StatusTile extends StatelessWidget {
   }
 }
 
-class _BlockedTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-
-  const _BlockedTile({required this.title, required this.subtitle});
-
+/// Student-visa tile — routes to the PAYE application flow.
+/// Student Visa holders earn as PAYE employees (not independent providers),
+/// subject to visa working-hours limits and admin approval.
+class _StudentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: Colors.red.shade50,
+      color: Colors.amber.shade50,
       child: ListTile(
+        leading: Icon(Icons.school, color: Colors.amber.shade800),
         title: Text(
-          title,
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red.shade700),
+          'Student Visa',
+          style: TextStyle(
+              fontWeight: FontWeight.w600, color: Colors.amber.shade900),
         ),
-        subtitle: Text(subtitle),
-        trailing: Icon(Icons.block, color: Colors.red.shade400),
+        subtitle: const Text('PAYE employment — weekly hours limit applies'),
+        trailing:
+            Icon(Icons.chevron_right, color: Colors.amber.shade700),
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const UkStudentBlockedScreen()),
+          MaterialPageRoute(
+            builder: (_) => const UkApplyScreen(
+              workStatus: 'student_visa',
+              requiresShareCode: true,
+            ),
+          ),
         ),
       ),
     );
