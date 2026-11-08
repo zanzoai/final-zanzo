@@ -49,6 +49,21 @@ class UkWorkStatusScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             const _StatusTile(
+              title: 'Student Visa',
+              subtitle: "We'll collect a few extra details for review.",
+              value: 'student_visa',
+              requiresShareCode: true,
+              icon: Icons.menu_book_outlined,
+            ),
+            const _StatusTile(
+              title: 'Graduate Visa',
+              subtitle:
+                  'Post-study work permission — we may ask for a GOV.UK share code',
+              value: 'graduate_visa',
+              requiresShareCode: true,
+              icon: Icons.school_outlined,
+            ),
+            const _StatusTile(
               title: 'British / Irish citizen',
               subtitle: 'UK or Irish passport holder',
               value: 'british_irish',
@@ -63,27 +78,12 @@ class UkWorkStatusScreen extends StatelessWidget {
               icon: Icons.public_outlined,
             ),
             const _StatusTile(
-              title: 'Graduate Visa',
-              subtitle:
-                  'Post-study work permission — we may ask for a GOV.UK share code',
-              value: 'graduate_visa',
-              requiresShareCode: true,
-              icon: Icons.school_outlined,
-            ),
-            const _StatusTile(
               title: 'Skilled Worker / restricted work visa',
               subtitle:
                   'Share your details so our team can review your work permission',
               value: 'skilled_worker_or_other',
               requiresShareCode: true,
               icon: Icons.work_outline,
-            ),
-            const _StatusTile(
-              title: 'Student Visa',
-              subtitle: "We'll collect a few extra details for review.",
-              value: 'student_visa',
-              requiresShareCode: true,
-              icon: Icons.menu_book_outlined,
             ),
             const _StatusTile(
               title: "Other visa / I'm not sure",

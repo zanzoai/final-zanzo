@@ -3,8 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
+import 'package:zanzo_frontend/core/widgets/error_state.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/features/user/screens/review_task_screen.dart';
 import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 
 class JobHistoryScreen extends StatefulWidget {
   const JobHistoryScreen({super.key});
@@ -27,6 +30,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
 
   List jobs = [];
   bool isLoading = true;
+  bool _error = false;
 
   @override
   void initState() {
@@ -35,7 +39,10 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
   }
 
   Future<void> _fetchJobs() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      _error = false;
+    });
     try {
       final res = await ApiService.getJson('/tasks/my');
       if (res.statusCode == 200) {
@@ -43,9 +50,11 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
         if (decoded is List) {
           setState(() => jobs = decoded);
         }
+      } else {
+        setState(() => _error = true);
       }
     } catch (_) {
-      // ignore
+      setState(() => _error = true);
     } finally {
       setState(() => isLoading = false);
     }
@@ -270,7 +279,12 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonJobList()
+          : (_error && jobs.isEmpty)
+          ? ErrorState(
+              message: "We couldn't load your orders. Please try again.",
+              onRetry: _fetchJobs,
+            )
           : jobs.isEmpty
           ? _emptyState()
           : ListView.separated(
@@ -322,9 +336,9 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
     final title = backendConcise.isNotEmpty
         ? backendConcise
         : _safeStr(
-            job['title'],
+            job['short_title'],
             _safeStr(
-              job['short_title'],
+              job['title'],
               _safeStr(job['polished_task'], 'Your Task'),
             ),
           );
@@ -355,16 +369,13 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
 
     // Amount
     final amount = job['estimated_amount'];
-    final currency = _safeStr(job['currency'], 'GBP').toUpperCase();
-    final symbol = currency == 'GBP'
-        ? '£'
-        : currency == 'INR'
-        ? '₹'
-        : currency;
-    final cost = (amount is num)
-        ? amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2)
+    final amountDisplay = (amount is num)
+        ? CurrencyFormatter.format(
+            amount,
+            _safeStr(job['currency'], 'GBP'),
+            compact: true,
+          )
         : '';
-    final amountDisplay = cost.isNotEmpty ? '$symbol$cost' : '';
 
     // Payment status (available after backend schema update)
     final payStatusLabel =

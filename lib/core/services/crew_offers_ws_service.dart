@@ -1,5 +1,5 @@
 // lib/core/services/crew_offers_ws_service.dart
-// WS /api/v1/ws/crew/me?token=<jwt>
+// WS /api/v1/ws/crew/me   (JWT sent as the 'bearer' subprotocol)
 // Receive-only: offer.received / offer.expired / task.cancelled
 // Accept/reject still go through REST (ZanCrewApi / ApiService).
 
@@ -7,11 +7,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'api_service.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
 
 class CrewOffersWsService with ChangeNotifier {
   WebSocketChannel? _channel;
@@ -26,6 +27,9 @@ class CrewOffersWsService with ChangeNotifier {
   void Function(String taskId)? onOfferReceived;
   void Function(String taskId)? onOfferExpired;
   void Function(String taskId)? onTaskCancelled;
+  /// Admin force-offline (or re-online): `crew.status_changed` carries the new
+  /// online state. See ZANZO_FLUTTER_API_REFERENCE.md §5.1.
+  void Function(bool isOnline)? onStatusChanged;
 
   int _reconnectAttempts = 0;
   bool _disposed = false;
@@ -52,22 +56,30 @@ class CrewOffersWsService with ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> _doConnect() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token') ?? '';
+    final token = await TokenStore.accessToken() ?? '';
     if (token.isEmpty) {
-      if (kDebugMode) print('[CrewOffersWS] no token — skipping connect');
+      if (kDebugMode) dlog('[CrewOffersWS] no token — skipping connect');
       return;
     }
 
-    final wsUri = Uri.parse(ApiService.wsBaseUrl('/api/v1/ws/crew/me'))
-        .replace(queryParameters: {'token': token});
+    final wsUri = Uri.parse(ApiService.wsBaseUrl('/api/v1/ws/crew/me'));
 
-    if (kDebugMode) print('[CrewOffersWS] connecting → $wsUri');
+    if (kDebugMode) dlog('[CrewOffersWS] connecting → $wsUri');
 
     try {
-      _channel = WebSocketChannel.connect(wsUri);
+      _channel = WebSocketChannel.connect(
+        wsUri,
+        // The token travels in the Sec-WebSocket-Protocol header ("bearer",
+        // <jwt>) rather than the URL, so it never lands in server or proxy
+        // access logs. The server answers with the "bearer" subprotocol.
+        protocols: ['bearer', token],
+      );
+      // A failed handshake is reported through `ready` as well as the
+      // stream; the stream's onError already logs and reconnects, so only
+      // stop `ready` from surfacing as an unhandled exception.
+      _channel!.ready.then<void>((_) {}, onError: (_) {});
     } catch (e) {
-      if (kDebugMode) print('[CrewOffersWS] connect error: $e');
+      if (kDebugMode) dlog('[CrewOffersWS] connect error: $e');
       _scheduleReconnect();
       return;
     }
@@ -83,7 +95,7 @@ class CrewOffersWsService with ChangeNotifier {
       _onFrame,
       onDone: _onClosed,
       onError: (e) {
-        if (kDebugMode) print('[CrewOffersWS] stream error: $e');
+        if (kDebugMode) dlog('[CrewOffersWS] stream error: $e');
         _cleanupWs();
         _scheduleReconnect();
       },
@@ -105,11 +117,11 @@ class CrewOffersWsService with ChangeNotifier {
           _connected = true;
           _reconnectAttempts = 0;
           _notify();
-          if (kDebugMode) print('[CrewOffersWS] ✅ connected');
+          if (kDebugMode) dlog('[CrewOffersWS] ✅ connected');
           break;
         case 'offer.received':
           final taskId = data['task_id']?.toString() ?? '';
-          if (kDebugMode) print('[CrewOffersWS] offer.received task=$taskId');
+          if (kDebugMode) dlog('[CrewOffersWS] offer.received task=$taskId');
           onOfferReceived?.call(taskId);
           break;
         case 'offer.expired':
@@ -118,22 +130,30 @@ class CrewOffersWsService with ChangeNotifier {
         case 'task.cancelled':
           onTaskCancelled?.call(data['task_id']?.toString() ?? '');
           break;
+        case 'crew.status_changed':
+          // Admin forced the crew offline (today only is_online:false is sent).
+          final isOnline = data['is_online'] == true;
+          if (kDebugMode) {
+            dlog('[CrewOffersWS] crew.status_changed is_online=$isOnline');
+          }
+          onStatusChanged?.call(isOnline);
+          break;
         case 'error':
           final code = data['code'] as int? ?? 0;
           if (kDebugMode) {
-            print('[CrewOffersWS] server error $code: ${data['message']}');
+            dlog('[CrewOffersWS] server error $code: ${data['message']}');
           }
           // 4001 = bad/expired token → refresh then reconnect
           if (code == 4001) _handleTokenExpired();
           break;
       }
     } catch (e) {
-      if (kDebugMode) print('[CrewOffersWS] frame parse error: $e');
+      if (kDebugMode) dlog('[CrewOffersWS] frame parse error: $e');
     }
   }
 
   void _onClosed() {
-    if (kDebugMode) print('[CrewOffersWS] closed');
+    if (kDebugMode) dlog('[CrewOffersWS] closed');
     _cleanupWs();
     if (!_disposed) _scheduleReconnect();
   }
@@ -150,7 +170,7 @@ class CrewOffersWsService with ChangeNotifier {
     final delay = _backoff(_reconnectAttempts);
     _reconnectAttempts++;
     if (kDebugMode) {
-      print('[CrewOffersWS] reconnect in ${delay.inSeconds}s '
+      dlog('[CrewOffersWS] reconnect in ${delay.inSeconds}s '
           '(attempt $_reconnectAttempts)');
     }
     _reconnectTimer?.cancel();

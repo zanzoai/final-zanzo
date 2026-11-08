@@ -19,7 +19,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/zancrew_api.dart';
+import '../dashboard/zancrew_dashboard.dart';
 import 'uk_work_status_screen.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class ZanCrewOnboarding extends StatefulWidget {
   /// If true → user is editing existing prefs instead of first-time setup.
@@ -187,9 +189,17 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
         ).showSnackBar(const SnackBar(content: Text('Preferences updated.')));
         Navigator.pop(context, true);
       } else {
+        // India users skip the UK right-to-work forms and go straight to the
+        // dashboard to see tasks; UK users continue to the work-status gate.
+        final countryCode = prefs.getString('country_code');
+        final phone = prefs.getString('user_phone') ?? '';
+        final isIndia = countryCode == 'IN' || phone.startsWith('+91');
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const UkWorkStatusScreen()),
+          MaterialPageRoute(
+            builder: (_) =>
+                isIndia ? const ZanCrewDashboard() : const UkWorkStatusScreen(),
+          ),
         );
       }
     } catch (e) {
@@ -310,7 +320,7 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
                   ),
                 ),
                 Text(
-                  '${_radius.round()} km',
+                  Market.radius(_radius, precise: true),
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -332,7 +342,7 @@ class _ZanCrewOnboardingState extends State<ZanCrewOnboarding> {
                 min: 1,
                 max: 50,
                 divisions: 49,
-                label: '${_radius.round()} km',
+                label: Market.radius(_radius, precise: true),
                 value: _radius,
                 onChanged: (v) => setState(() => _radius = v),
               ),

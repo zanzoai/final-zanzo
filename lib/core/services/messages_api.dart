@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -34,7 +35,16 @@ class ChatMessage {
     required this.createdAt,
     this.imageStoragePath,
     this.extension,
+    this.imageUrl,
   });
+
+  /// Short-lived signed link from the API, for images uploaded through
+  /// POST /messages/upload-image. Null for older images stored directly in
+  /// Supabase — those use [publicImageUrl].
+  final String? imageUrl;
+
+  /// The link to show for this message's image, whichever way it was stored.
+  String? displayImageUrl() => imageUrl ?? publicImageUrl();
 
   bool get isImage =>
       kind.toLowerCase() == 'image' ||
@@ -64,6 +74,7 @@ class ChatMessage {
       content: (m['content'] ?? '').toString(),
       imageStoragePath: _nullIfEmpty(m['image_storage_path']?.toString()),
       extension: _nullIfEmpty(m['extension']?.toString()),
+      imageUrl: _nullIfEmpty(m['image_url']?.toString()),
       createdAt: DateTime.tryParse(m['created_at']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
     );
@@ -75,7 +86,6 @@ class ChatMessage {
 // ---------------------------------------------------------------------------
 
 class MessagesApi {
-  static const _bucket = 'chat_uploads';
 
   // ---------------------------
   // 1) LIST MESSAGES FOR A JOB
@@ -137,29 +147,48 @@ class MessagesApi {
   }
 
   // ---------------------------
-  // 3) UPLOAD IMAGE BYTES TO SUPABASE
+  // 3) UPLOAD IMAGE BYTES THROUGH THE API
   // ---------------------------
+  // POST /messages/upload-image (multipart: task_id + file). The server checks
+  // the caller is part of the task and checks the file really is an image,
+  // then stores it under that task. Returns the storage path to send with the
+  // message. (Images used to go straight to a Supabase bucket with the public
+  // key, with no check on who uploaded what.)
 
   static Future<String> uploadImageBytes({
     required String jobId,
     required Uint8List bytes,
-    required String fileExt,   // jpg | png
-    required String mimeType,  // image/jpeg | image/png
+    required String fileExt,   // jpg | png | webp
+    required String mimeType,  // image/jpeg | image/png | image/webp
   }) async {
-    final id = const Uuid().v4();
-    final objectPath = 'jobs/$jobId/$id.$fileExt';
+    final uri = Uri.parse('${ApiService.baseUrl}/messages/upload-image');
 
-    await Supabase.instance.client.storage.from(_bucket).uploadBinary(
-          objectPath,
+    final res = await ApiService.callWithRefresh((headers) async {
+      final req = http.MultipartRequest('POST', uri)
+        ..headers.addAll({
+          if (headers['Authorization'] != null)
+            'Authorization': headers['Authorization']!,
+        })
+        ..fields['task_id'] = jobId
+        ..files.add(http.MultipartFile.fromBytes(
+          'file',
           bytes,
-          fileOptions: FileOptions(
-            contentType: mimeType,
-            cacheControl: '3600',
-            upsert: false,
-          ),
-        );
+          filename: '${const Uuid().v4()}.$fileExt',
+          contentType: MediaType.parse(mimeType),
+        ));
+      return http.Response.fromStream(await req.send());
+    });
 
-    return objectPath; // storage path only
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception(
+        res.statusCode == 413
+            ? 'That image is too large.'
+            : 'Could not upload the image (${res.statusCode}).',
+      );
+    }
+    final path = (jsonDecode(res.body) as Map<String, dynamic>)['storage_path']?.toString();
+    if (path == null || path.isEmpty) throw Exception('Could not upload the image.');
+    return path;
   }
 
   // ---------------------------

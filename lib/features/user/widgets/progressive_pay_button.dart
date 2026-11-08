@@ -6,7 +6,7 @@
 // lib/features/user/widgets/progressive_pay_button.dart
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 
 class ProgressivePayButton extends StatefulWidget {
   /// Preferred modern API: numeric amount + currency code.
@@ -105,26 +105,13 @@ class _ProgressivePayButtonState extends State<ProgressivePayButton>
   // ---------------------------------------------------------------------------
   String _formattedPrice() {
     if (widget.amount != null && widget.currencyCode != null) {
-      final format = NumberFormat.currency(
-        symbol: _symbol(widget.currencyCode!),
-        decimalDigits: 0,
+      return CurrencyFormatter.format(
+        widget.amount!,
+        widget.currencyCode,
+        compact: true,
       );
-      return format.format(widget.amount);
     }
     return widget.priceText ?? '';
-  }
-
-  String _symbol(String code) {
-    switch (code.toUpperCase()) {
-      case 'INR':
-        return '₹';
-      case 'GBP':
-        return '£';
-      case 'USD':
-        return '\$';
-      default:
-        return code; // fallback for EUR, SGD, etc.
-    }
   }
 
   // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/zancrew_api.dart';
 
+import '../../../core/widgets/skeleton.dart';
 import '../dashboard/zancrew_dashboard.dart';
 import '../screens/zancrew_verification.dart';
 
@@ -157,7 +158,7 @@ class _KycIntroScreenState extends State<KycIntroScreen> {
         elevation: 0,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonDetail()
           : (_userId == null)
               ? _missingUser()
               : ListView(

@@ -30,6 +30,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/verification_api.dart';
 import '../../../core/services/zancrew_api.dart';
 import '../dashboard/zancrew_dashboard.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 class ZanCrewVerification extends StatefulWidget {
   final String userId;
@@ -218,11 +219,12 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
 
   Future<void> _pickDob(BuildContext context) async {
     final now = DateTime.now();
+    final latest18 = DateTime(now.year - 18, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime(now.year - 21, now.month, now.day),
       firstDate: DateTime(1900),
-      lastDate: now,
+      lastDate: latest18,
     );
     if (picked == null) return;
 
@@ -257,7 +259,7 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
       if (res == null) return null;
       return File(res.path);
     } catch (e) {
-      debugPrint('❌ Crop error: $e');
+      dlog('❌ Crop error: $e');
       return null;
     }
   }
@@ -313,7 +315,7 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
         await textRecognizer.close();
 
         final ocrText = text.text;
-        debugPrint("🔍 Aadhaar FRONT OCR:\n$ocrText");
+        dlog("🔍 Aadhaar FRONT OCR:\n$ocrText");
 
         // Extract Aadhaar number (xxxx xxxx xxxx)
         final aadhaarRegex = RegExp(r'\d{4}\s\d{4}\s\d{4}');
@@ -374,10 +376,10 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
         _aadhaarBackCropped = imageFile;
       });
 
-      debugPrint("📄 Aadhaar BACK captured (no OCR)");
+      dlog("📄 Aadhaar BACK captured (no OCR)");
       _toast("Back image captured!");
     } catch (e) {
-      debugPrint("❌ Aadhaar OCR error: $e");
+      dlog("❌ Aadhaar OCR error: $e");
       _toast("Scan failed: $e", ok: false);
     }
   }
@@ -453,17 +455,17 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
       final backB64 = backFile != null ? await _toBase64(backFile) : null;
       final selfieB64 = await _toBase64(_selfieCropped ?? _selfie);
 
-      debugPrint("====== BASE64 CHECK ======");
-      debugPrint(
+      dlog("====== BASE64 CHECK ======");
+      dlog(
         "Front present? ${(_aadhaarFrontCropped ?? _aadhaarFront) != null}",
       );
-      debugPrint(
+      dlog(
         "Back present?  ${_aadhaarBackCropped ?? _aadhaarBack != null}",
       );
-      debugPrint("Selfie present? ${_selfieCropped ?? _selfie != null}");
-      debugPrint("FrontB64 len: ${frontB64?.length ?? 0}");
-      debugPrint("BackB64  len: ${backB64?.length ?? 0}");
-      debugPrint("SelfieB64 len: ${selfieB64?.length ?? 0}");
+      dlog("Selfie present? ${_selfieCropped ?? _selfie != null}");
+      dlog("FrontB64 len: ${frontB64?.length ?? 0}");
+      dlog("BackB64  len: ${backB64?.length ?? 0}");
+      dlog("SelfieB64 len: ${selfieB64?.length ?? 0}");
 
       final payloadPreview = {
         "user_id": widget.userId,
@@ -484,8 +486,8 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
             : "NULL",
       };
 
-      debugPrint("📤 Unified verification payload preview:");
-      debugPrint(payloadPreview.toString());
+      dlog("📤 Unified verification payload preview:");
+      dlog(payloadPreview.toString());
 
       final result = await VerificationApi.startUnified(
         userId: widget.userId,
@@ -1353,8 +1355,18 @@ class _ZanCrewVerificationState extends State<ZanCrewVerification> {
   String? _reqDob(String? v) {
     final t = v?.trim() ?? '';
     if (t.isEmpty) return 'Required';
-    final rgx = RegExp(r'^\d{4}-\d{2}-\d{2}$'); // YYYY-MM-DD
-    return rgx.hasMatch(t) ? null : 'Use YYYY-MM-DD';
+    final rgx = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+    if (!rgx.hasMatch(t)) return 'Use YYYY-MM-DD';
+    final dob = DateTime.tryParse(t);
+    if (dob == null) return 'Invalid date';
+    final now = DateTime.now();
+    final age = now.year - dob.year -
+        ((now.month < dob.month ||
+                (now.month == dob.month && now.day < dob.day))
+            ? 1
+            : 0);
+    if (age < 18) return 'Must be 18 or older';
+    return null;
   }
 
   String? _reqIfsc(String? v) {

@@ -11,6 +11,7 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 class VoiceWsService with ChangeNotifier {
   static const int sampleRate = 16000;
@@ -62,7 +63,7 @@ class VoiceWsService with ChangeNotifier {
         } catch (_) {}
       },
       onError: (e) {
-        if (kDebugMode) print("PCM error: $e");
+        if (kDebugMode) dlog("PCM error: $e");
       },
     );
 
@@ -144,7 +145,7 @@ class VoiceWsService with ChangeNotifier {
     if (_channel != null) return;
 
     final wsUrl = ApiService.wsBaseUrl("/voice/live");
-    if (kDebugMode) print("Connecting voice WS → $wsUrl");
+    if (kDebugMode) dlog("Connecting voice WS → $wsUrl");
 
     _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
@@ -182,21 +183,21 @@ class VoiceWsService with ChangeNotifier {
             }
           }
         } catch (e) {
-          if (kDebugMode) print("WS decode error: $e");
+          if (kDebugMode) dlog("WS decode error: $e");
         }
       },
       onDone: () {
-        if (kDebugMode) print("WS closed");
+        if (kDebugMode) dlog("WS closed");
         _cleanupWs();
       },
       onError: (err) {
-        if (kDebugMode) print("WS error: $err");
+        if (kDebugMode) dlog("WS error: $err");
         _cleanupWs();
       },
       cancelOnError: true,
     );
 
-    if (kDebugMode) print("WS connected");
+    if (kDebugMode) dlog("WS connected");
   }
 
   Future<void> _disposePcmStream() async {

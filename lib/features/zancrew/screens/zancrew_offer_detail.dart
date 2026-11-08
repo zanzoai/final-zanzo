@@ -16,9 +16,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/api_service.dart';
+import '../../../core/widgets/error_state.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/payment_chip.dart';
 import '../onboarding/uk_bank_details_screen.dart';
 import 'zancrew_JobDetails.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class CrewOfferDetail extends StatefulWidget {
   final Map<String, dynamic> offer;
@@ -31,6 +35,7 @@ class CrewOfferDetail extends StatefulWidget {
 
 class _CrewOfferDetailState extends State<CrewOfferDetail> {
   bool _loading = true;
+  bool _error = false;
   bool _posting = false;
   bool _hasActiveJob = false;
 
@@ -72,11 +77,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
 
     try {
       final dd = (d is num) ? d.toDouble() : double.parse(d.toString());
-      if (dd < 1.0) {
-        final meters = (dd * 1000).round();
-        return '$meters m';
-      }
-      return '${dd.toStringAsFixed(1)} km';
+      return Market.distance(dd);
     } catch (_) {
       return '';
     }
@@ -97,14 +98,7 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
         final p = (paise is num)
             ? paise.toDouble()
             : double.parse(paise.toString());
-        final rupees = p / 100.0;
-        final symbol = (currency == 'INR')
-            ? '₹'
-            : (currency == 'GBP')
-            ? '£'
-            : '£';
-        final isWhole = rupees.truncateToDouble() == rupees;
-        return '$symbol${rupees.toStringAsFixed(isWhole ? 0 : 2)} est.';
+        return '${CurrencyFormatter.formatMinor(p, currency, compact: true)} est.';
       } catch (_) {}
     }
 
@@ -113,13 +107,8 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
     if (raw == null) return '';
     try {
       final v = (raw is num) ? raw.toDouble() : double.parse(raw.toString());
-      final symbol = (currency == 'INR')
-          ? '₹'
-          : (currency == 'GBP')
-          ? '£'
-          : '£';
       if (raw is String && RegExp(r'[₹£]').hasMatch(raw)) return raw;
-      return '$symbol${v.toStringAsFixed(2)} est.';
+      return '${CurrencyFormatter.format(v, currency)} est.';
     } catch (_) {
       return raw.toString();
     }
@@ -189,6 +178,31 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
   String get _importantNotes =>
       (_job?['important_notes'] ?? _offer['important_notes'] ?? '').toString();
 
+  // --- Phase 1: PAYE / engagement type ---
+
+  /// "paye" | "independent" | null
+  String? get _engagementType =>
+      (_job?['engagement_type'] ?? _offer['engagement_type'])?.toString();
+
+  /// Estimated PAYE basic wage in pence (null for independent/India workers).
+  double? get _payeEstimatedWagePence {
+    final v = _job?['paye_estimated_wage_pence'] ?? _offer['paye_estimated_wage_pence'];
+    if (v == null) return null;
+    try {
+      return (v is num) ? v.toDouble() : double.parse(v.toString());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Basic pay estimate label. Excludes holiday pay and net pay (pending JMK confirmation).
+  String get _payeWageLabel {
+    final pence = _payeEstimatedWagePence;
+    if (pence == null || pence <= 0) return '';
+    final pounds = pence / 100.0;
+    return '~£${pounds.toStringAsFixed(2)} basic pay only (holiday pay pending JMK)';
+  }
+
   // -----------------------------------------------------------------------------
   // Lifecycle, API calls, distance refresh, Google Maps, Accept / Reject logic
   // -----------------------------------------------------------------------------
@@ -235,7 +249,10 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
     try {
       final res = await ApiService.getJson('/tasks/$_jobId');
 
@@ -246,15 +263,12 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
           setState(() => _job = Map<String, dynamic>.from(data));
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load job: HTTP ${res.statusCode}')),
-        );
+        // Inline error state instead of a snackbar (see build()).
+        setState(() => _error = true);
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to load job: $e')));
+      setState(() => _error = true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -677,7 +691,12 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
       ),
 
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonDetail()
+          : (_error && (_job == null || _job!.isEmpty))
+          ? ErrorState(
+              message: "We couldn't load this offer. Please try again.",
+              onRetry: _loadJob,
+            )
           : RefreshIndicator(
               onRefresh: () async {
                 await _loadJob();
@@ -706,6 +725,19 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                             if (_bucket.isNotEmpty) _tag(_bucket),
                           ],
                         ),
+                        // PAYE workers see their estimated basic wage (£14/hr × duration)
+                        // below the customer's total price.
+                        if (_engagementType == 'paye' && _payeWageLabel.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _payeWageLabel,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFF16A34A),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 8),
 
                         Align(

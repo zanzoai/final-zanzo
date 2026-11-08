@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Core services
 import 'package:zanzo_frontend/core/services/api_service.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/core/services/auth.dart';
 import 'package:zanzo_frontend/core/services/uk_provider_api.dart';
 import 'package:zanzo_frontend/core/services/zancrew_api.dart';
@@ -12,6 +13,7 @@ import 'package:zanzo_frontend/features/user/screens/job_history_screen.dart';
 import 'package:zanzo_frontend/features/user/widgets/add_email_dialog.dart';
 import 'package:zanzo_frontend/features/user/widgets/change_phone_dialog.dart';
 import 'package:zanzo_frontend/features/user/widgets/login_prompt_dialog.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -47,60 +49,116 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    // Paint instantly from cached prefs, then refresh from the network in the
+    // background. Previously the whole screen sat behind a spinner while three
+    // API calls ran sequentially on a slow/cold staging backend — 2–4s of
+    // blank screen on mobile. All these values are already cached locally.
+    _hydrateFromCache();
     _loadProfile();
   }
 
   // ---------------------------------------------------------------------------
   // LOAD PROFILE
   // ---------------------------------------------------------------------------
+
+  /// Instant paint from SharedPreferences — no network, so the profile is
+  /// visible immediately with the last-known values.
+  Future<void> _hydrateFromCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _applyCache(prefs);
+      _loading = false;
+    });
+  }
+
+  /// Background refresh. Runs the independent `getMe` in PARALLEL with the
+  /// zancrew→uk chain (kept sequential because the UK status authoritatively
+  /// overrides zancrew_status), then repaints with the fresh values.
   Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
     final uid = prefs.getString('user_id');
 
-    if (uid != null) {
-      try {
-        final profile = await ZanCrewApi.getProfile(uid);
-        if (profile != null) {
-          await prefs.setString('zancrew_status', profile['status'] ?? 'off');
-          await prefs.setStringList(
-            'zancrew_buckets',
-            (profile['buckets'] as List?)?.map((e) => e.toString()).toList() ??
-                <String>[],
-          );
-          await prefs.setBool(
-            'zancrew_bank_verified',
-            profile['bank_verified'] ?? false,
-          );
-          await prefs.setBool(
-            'zancrew_kyc_verified',
-            profile['kyc_verified'] ?? false,
-          );
-        }
-      } catch (_) {}
+    await Future.wait([
+      if (uid != null) _refreshZanCrew(prefs, uid),
+      _refreshMe(prefs),
+    ]);
 
-      // UK provider status is the authoritative approval gate — override
-      // zancrew_status and zancrew_enabled based on it so the profile card
-      // shows the correct state regardless of zancrew_profiles.status.
-      try {
-        final ukStatus = await UkProviderApi.getStatus(uid);
-        if (ukStatus != null) {
-          final providerStatus = ukStatus['provider_status'] as String? ?? '';
-          final canReceive = ukStatus['can_receive_offers'] == true;
-          if (providerStatus == 'approved' && canReceive) {
-            await prefs.setString('zancrew_status', 'active');
-            await prefs.setBool('zancrew_enabled', true);
-          } else if (providerStatus == 'pending') {
-            await prefs.setString('zancrew_status', 'pending');
-          } else if (providerStatus == 'rejected' ||
-              providerStatus == 'suspended') {
-            await prefs.setString('zancrew_status', 'rejected');
-          }
-        }
-      } catch (_) {}
-    }
+    if (!mounted) return;
+    setState(() {
+      _applyCache(prefs);
+      _loading = false;
+    });
+  }
 
-    // Refresh name/email from backend on every profile load.
-    // Errors are swallowed — local prefs remain as fallback.
+  /// getProfile → getStatus, sequential so the UK status override wins.
+  Future<void> _refreshZanCrew(SharedPreferences prefs, String uid) async {
+    try {
+      final profile = await ZanCrewApi.getProfile(uid);
+      if (profile == null) {
+        // No crew profile: not a crew member.
+        await prefs.setString('zancrew_status', 'off');
+        await prefs.setBool('zancrew_enabled', false);
+      } else {
+        await prefs.setString('zancrew_status', profile['status'] ?? 'off');
+        // Keeps the home "Work" toggle in step with the status shown here.
+        await prefs.setBool('zancrew_enabled', profile['status'] == 'active');
+        // The API sends buckets as comma-separated text; older builds sent a
+        // list. Casting the text to a List threw and skipped the rest.
+        final rawBuckets = profile['buckets'];
+        final buckets = rawBuckets is List
+            ? rawBuckets.map((e) => e.toString()).toList()
+            : (rawBuckets?.toString() ?? '')
+                .split(',')
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
+        await prefs.setStringList('zancrew_buckets', buckets);
+        await prefs.setBool(
+          'zancrew_bank_verified',
+          profile['bank_verified'] ?? false,
+        );
+        await prefs.setBool(
+          'zancrew_kyc_verified',
+          profile['kyc_verified'] ?? false,
+        );
+      }
+    } catch (_) {}
+
+    // UK provider status can refine an in-progress UK application, but it must
+    // NOT demote a crew who is already active. Approval via EITHER flow
+    // (non-UK ZanCrew or UK provider) sets can_receive_offers=true and the
+    // zan_crew row to `active`, so:
+    //   • can_receive_offers==true (or provider_status=='approved') ⇒ active.
+    //   • Only the three terminal UK statuses are meaningful; everything else
+    //     (submitted/reviewing/resubmit_docs/payroll_*) is "still under review".
+    //   • A rejected/suspended UK record must never override an already-active
+    //     crew (e.g. a non-UK crew whose UK provider record is empty/stale).
+    // See ZANZO_FLUTTER_API_REFERENCE.md §3 (provider_status lifecycle).
+    try {
+      final ukStatus = await UkProviderApi.getStatus(uid);
+      if (ukStatus != null) {
+        final providerStatus = ukStatus['provider_status'] as String? ?? '';
+        final canReceive = ukStatus['can_receive_offers'] == true;
+        final alreadyActive =
+            (prefs.getString('zancrew_status') ?? 'off') == 'active';
+
+        if (canReceive || providerStatus == 'approved') {
+          await prefs.setString('zancrew_status', 'active');
+          await prefs.setBool('zancrew_enabled', true);
+        } else if (!alreadyActive &&
+            (providerStatus == 'rejected' || providerStatus == 'suspended')) {
+          await prefs.setString('zancrew_status', 'rejected');
+        } else if (!alreadyActive && providerStatus.isNotEmpty) {
+          // submitted / reviewing / resubmit_docs / payroll_* → under review.
+          await prefs.setString('zancrew_status', 'pending');
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Refresh name/email from backend; errors swallowed (cache is the fallback).
+  Future<void> _refreshMe(SharedPreferences prefs) async {
     try {
       final me = await ApiService.getMe();
       if (me != null) {
@@ -114,19 +172,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (_) {}
+  }
 
-    setState(() {
-      _name = prefs.getString('user_name');
-      _phone = prefs.getString('user_phone');
-      _email = prefs.getString('user_email');
+  /// Copies cached prefs into local state fields (no network).
+  void _applyCache(SharedPreferences prefs) {
+    _name = prefs.getString('user_name');
+    _phone = prefs.getString('user_phone');
+    _email = prefs.getString('user_email');
 
-      _zancrewStatus = prefs.getString('zancrew_status') ?? 'off';
-      _zancrewBuckets = prefs.getStringList('zancrew_buckets') ?? <String>[];
-      _bankVerified = prefs.getBool('zancrew_bank_verified') ?? false;
-      _kycVerified = prefs.getBool('zancrew_kyc_verified') ?? false;
-
-      _loading = false;
-    });
+    _zancrewStatus = prefs.getString('zancrew_status') ?? 'off';
+    _zancrewBuckets = prefs.getStringList('zancrew_buckets') ?? <String>[];
+    _bankVerified = prefs.getBool('zancrew_bank_verified') ?? false;
+    _kycVerified = prefs.getBool('zancrew_kyc_verified') ?? false;
   }
 
   // ---------------------------------------------------------------------------
@@ -192,7 +249,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         surfaceTintColor: Colors.transparent,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _accent))
+          ? _profileSkeleton()
           : (!signedIn ? _loginRequired() : _profileBody(initial)),
     );
   }
@@ -256,6 +313,153 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ---------------------------------------------------------------------------
   // MAIN BODY
   // ---------------------------------------------------------------------------
+  // Shimmer shaped like the real profile: identity card (avatar + name + chips
+  // + phone/email rows), ZanCrew status card, actions menu, logout button.
+  Widget _profileSkeleton() {
+    Widget infoRow() => const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      child: Row(
+        children: [
+          SkeletonBone(
+            width: 40,
+            height: 40,
+            radius: BorderRadius.all(Radius.circular(10)),
+          ),
+          SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkeletonLine(widthFactor: 0.25, height: 11),
+                SizedBox(height: 9),
+                SkeletonLine(widthFactor: 0.55, height: 14),
+              ],
+            ),
+          ),
+          SizedBox(width: 12),
+          SkeletonBone(width: 52, height: 14),
+        ],
+      ),
+    );
+
+    Widget menuRow() => const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+      child: Row(
+        children: [
+          SkeletonBone(
+            width: 34,
+            height: 34,
+            radius: BorderRadius.all(Radius.circular(9)),
+          ),
+          SizedBox(width: 14),
+          Expanded(child: SkeletonLine(widthFactor: 0.45, height: 14)),
+          SizedBox(width: 12),
+          SkeletonBone(width: 16, height: 16),
+        ],
+      ),
+    );
+
+    const divider = Divider(height: 1, color: Color(0x11000000));
+
+    return Shimmer(
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Identity header card
+            SkeletonCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                    child: Row(
+                      children: const [
+                        SkeletonCircle(size: 56),
+                        SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SkeletonLine(widthFactor: 0.6, height: 18),
+                              SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  SkeletonBone(
+                                    width: 92,
+                                    height: 26,
+                                    radius: BorderRadius.all(
+                                      Radius.circular(13),
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  SkeletonBone(
+                                    width: 84,
+                                    height: 26,
+                                    radius: BorderRadius.all(
+                                      Radius.circular(13),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  divider,
+                  infoRow(),
+                  divider,
+                  infoRow(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            // ZanCrew status card
+            SkeletonCard(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: const [
+                  SkeletonBone(width: 120, height: 16),
+                  SkeletonBone(
+                    width: 74,
+                    height: 26,
+                    radius: BorderRadius.all(Radius.circular(13)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            // Actions menu card
+            SkeletonCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  menuRow(),
+                  divider,
+                  menuRow(),
+                  divider,
+                  menuRow(),
+                  divider,
+                  menuRow(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const SkeletonBone(
+              width: double.infinity,
+              height: 52,
+              radius: BorderRadius.all(Radius.circular(14)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _profileBody(String initial) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
@@ -370,7 +574,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               action: (_email?.isNotEmpty ?? false) ? 'Edit' : 'Add',
               onTap: () async {
                 final prefs = await SharedPreferences.getInstance();
-                final token = prefs.getString('access_token');
+                final token = await TokenStore.accessToken();
                 if (token == null) return _signIn();
                 final result = await showAddEmailDialog(
                   context,

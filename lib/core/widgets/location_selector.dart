@@ -8,8 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/constants/service_zones.dart';
+import 'package:zanzo_frontend/core/config/app_config.dart';
 
-const googleMapsKey = "AIzaSyDjDx3TOFqJtSls96YrM2m86t3KFwIE4b0";
+const googleMapsKey = AppConfig.googleMapsKey;
 
 class LocationSelector extends StatefulWidget {
   final TextEditingController controller;

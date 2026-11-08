@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 
 const _kBg = Color(0xFFFCFAF6);
 const _kInk = Color(0xFF26211C);
@@ -233,7 +234,7 @@ class _AccountDataScreenState extends State<AccountDataScreen> {
         surfaceTintColor: Colors.transparent,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _kSaffron))
+          ? _accountSkeleton()
           : SafeArea(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -248,6 +249,64 @@ class _AccountDataScreenState extends State<AccountDataScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  // Shimmer shaped like this screen: two labelled sections — an info card with
+  // three value rows, then a privacy card with action rows.
+  Widget _accountSkeleton() {
+    const divider = Divider(height: 1, color: Color(0x11000000));
+    Widget label() => const Padding(
+      padding: EdgeInsets.only(left: 4, bottom: 12),
+      child: SkeletonBone(width: 150, height: 11),
+    );
+    Widget infoRow() => const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      child: Row(
+        children: [
+          SkeletonLine(widthFactor: 0.22, height: 13),
+          Spacer(),
+          SkeletonBone(width: 120, height: 13),
+        ],
+      ),
+    );
+    Widget actionRow() => const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+      child: Row(
+        children: [
+          SkeletonBone(
+            width: 34,
+            height: 34,
+            radius: BorderRadius.all(Radius.circular(9)),
+          ),
+          SizedBox(width: 14),
+          Expanded(child: SkeletonLine(widthFactor: 0.5, height: 14)),
+          SizedBox(width: 12),
+          SkeletonBone(width: 16, height: 16),
+        ],
+      ),
+    );
+
+    return Shimmer(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          label(),
+          SkeletonCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [infoRow(), divider, infoRow(), divider, infoRow()],
+            ),
+          ),
+          const SizedBox(height: 24),
+          label(),
+          SkeletonCard(
+            padding: EdgeInsets.zero,
+            child: Column(children: [actionRow(), divider, actionRow()]),
+          ),
+        ],
+      ),
     );
   }
 

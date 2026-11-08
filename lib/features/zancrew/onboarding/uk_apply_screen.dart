@@ -1,5 +1,9 @@
 // lib/features/zancrew/onboarding/uk_apply_screen.dart
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/uk_provider_api.dart';
@@ -7,6 +11,8 @@ import 'uk_document_upload_screen.dart';
 import 'uk_hold_screen.dart';
 import 'uk_pending_screen.dart';
 import 'uk_rejected_screen.dart';
+
+enum _EvidenceStatus { idle, uploading, done, failed }
 
 class UkApplyScreen extends StatefulWidget {
   final String workStatus;
@@ -29,6 +35,17 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
   static const _accent = Color(0xFFD97706);
   static const _border = Color(0xFFE8E2D9);
 
+  static const _success = Color(0xFF16A34A);
+
+  // Course level dropdown options for student_visa.
+  static const _courseLevelOptions = [
+    ('undergraduate', 'Undergraduate'),
+    ('postgraduate', 'Postgraduate'),
+    ('foundation', 'Foundation / Access'),
+    ('phd', 'PhD / Research'),
+    ('other', 'Other'),
+  ];
+
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _dobCtrl = TextEditingController();
@@ -38,7 +55,20 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
   final _universityCtrl = TextEditingController();
   final _courseCtrl = TextEditingController();
   final _visaExpiryCtrl = TextEditingController();
+  final _otherEmploymentCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+
+  String? _courseLevel;
+
+  // Term evidence upload state (student_visa only).
+  File? _evidenceFile;
+  String? _evidenceFileName;
+  _EvidenceStatus _evidenceStatus = _EvidenceStatus.idle;
+  String? _evidenceError;
+
+  bool get _evidenceDone => _evidenceStatus == _EvidenceStatus.done;
+  bool get _requiresEvidence => widget.workStatus == 'student_visa';
+  bool get _canSubmit => !_requiresEvidence || _evidenceDone;
 
   bool _termsAgreed = false;
   bool _submitting = false;
@@ -65,6 +95,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
     _universityCtrl.dispose();
     _courseCtrl.dispose();
     _visaExpiryCtrl.dispose();
+    _otherEmploymentCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -82,6 +113,15 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
       );
       return;
     }
+    if (_requiresEvidence && !_evidenceDone) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Please upload your term/vacation-date evidence before submitting.'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
 
@@ -89,6 +129,11 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('user_id') ?? '';
       if (userId.isEmpty) throw Exception('Not signed in');
+
+      final otherHoursText = _otherEmploymentCtrl.text.trim();
+      final otherHours = otherHoursText.isNotEmpty
+          ? int.tryParse(otherHoursText)
+          : null;
 
       final result = await UkProviderApi.apply(
         userId: userId,
@@ -113,9 +158,11 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
         courseName: _courseCtrl.text.trim().isNotEmpty
             ? _courseCtrl.text.trim()
             : null,
+        courseLevel: _courseLevel,
         visaExpiryDate: _visaExpiryCtrl.text.trim().isNotEmpty
             ? _visaExpiryCtrl.text.trim()
             : null,
+        otherEmploymentHoursPerWeek: otherHours,
         applicantNotes: _notesCtrl.text.trim().isNotEmpty
             ? _notesCtrl.text.trim()
             : null,
@@ -209,6 +256,372 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
       default:
         return 'Please provide your details.';
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // EVIDENCE UPLOAD
+  // ---------------------------------------------------------------------------
+  static const _maxEvidenceBytes = 10 * 1024 * 1024; // 10 MB
+
+  void _showEvidencePicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: _border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined, color: _ink),
+                title: const Text(
+                  'Choose from Files',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: _ink),
+                ),
+                subtitle: const Text('PDF, DOCX, JPG, PNG',
+                    style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromFiles();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: _ink),
+                title: const Text(
+                  'Choose from Gallery',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: _ink),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined, color: _ink),
+                title: const Text(
+                  'Take Photo',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: _ink),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromCamera();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickFromFiles() async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'docx', 'doc', 'jpg', 'jpeg', 'png'],
+        withData: false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Could not open file picker. Please try again.')),
+      );
+      return;
+    }
+    if (result == null || result.files.isEmpty) return;
+    final pf = result.files.single;
+    if (pf.path == null) return;
+    await _uploadEvidence(File(pf.path!), pf.name);
+  }
+
+  Future<void> _pickFromGallery() async {
+    XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 90,
+        maxWidth: 2000,
+        maxHeight: 2000,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open gallery. Please try again.')),
+      );
+      return;
+    }
+    if (picked == null) return;
+    await _uploadEvidence(File(picked.path), picked.name);
+  }
+
+  Future<void> _pickFromCamera() async {
+    XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 90,
+        maxWidth: 2000,
+        maxHeight: 2000,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open camera. Please try again.')),
+      );
+      return;
+    }
+    if (picked == null) return;
+    await _uploadEvidence(File(picked.path), picked.name);
+  }
+
+  Future<void> _uploadEvidence(File file, String name) async {
+    final size = await file.length();
+    if (size > _maxEvidenceBytes) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('File is too large. Maximum size is 10 MB.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _evidenceFile = file;
+      _evidenceFileName = name;
+      _evidenceStatus = _EvidenceStatus.uploading;
+      _evidenceError = null;
+    });
+
+    try {
+      await UkProviderApi.uploadDocument(
+        documentType: 'term_time_evidence',
+        file: file,
+      );
+      if (!mounted) return;
+      setState(() => _evidenceStatus = _EvidenceStatus.done);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _evidenceStatus = _EvidenceStatus.failed;
+        _evidenceError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  Widget _evidenceUploadCard() {
+    final isDone = _evidenceStatus == _EvidenceStatus.done;
+    final isUploading = _evidenceStatus == _EvidenceStatus.uploading;
+    final isFailed = _evidenceStatus == _EvidenceStatus.failed;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDone ? const Color(0xFFBBF7D0) : _border,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: isDone
+                      ? const Color(0xFFECFDF5)
+                      : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isDone ? Icons.check : Icons.description_outlined,
+                  size: 20,
+                  color: isDone ? _success : _accent,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Term / Vacation-date Evidence *',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: _ink),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'PDF, DOCX or image — max 10 MB',
+                      style: TextStyle(fontSize: 12, color: _muted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Upload a document showing your term dates or vacation periods '
+            '(e.g. university term calendar, letter from your institution).',
+            style: TextStyle(fontSize: 13, color: _muted, height: 1.3),
+          ),
+          const SizedBox(height: 12),
+          if (_evidenceFileName != null) ...[
+            Row(
+              children: [
+                const Icon(Icons.attach_file, size: 16, color: _muted),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    _evidenceFileName!,
+                    style: const TextStyle(fontSize: 13, color: _ink),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (isUploading)
+            const Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: _accent),
+                ),
+                SizedBox(width: 8),
+                Text('Uploading…',
+                    style: TextStyle(color: _accent, fontSize: 13)),
+              ],
+            )
+          else if (isDone)
+            Row(
+              children: [
+                const Icon(Icons.check_circle, color: _success, size: 18),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'Uploaded',
+                    style: TextStyle(
+                        color: _success,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _showEvidencePicker,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Change'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: _muted,
+                    textStyle: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            if (isFailed && _evidenceError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline,
+                        color: Colors.red, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(_evidenceError!,
+                          style: const TextStyle(
+                              color: Colors.red, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: _showEvidencePicker,
+                icon: const Icon(Icons.upload_file_outlined, size: 18),
+                label: Text(_evidenceFile == null
+                    ? 'Choose File'
+                    : 'Choose Different File'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _accent,
+                  side: const BorderSide(color: _accent),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  textStyle: const TextStyle(
+                      fontSize: 13.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DATE PICKERS
+  // ---------------------------------------------------------------------------
+  Future<void> _pickDob(BuildContext context) async {
+    final now = DateTime.now();
+    // lastDate = exactly 18 years ago — the picker itself blocks under-18 dates
+    final latest18 = DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year - 21, now.month, now.day),
+      firstDate: DateTime(1900),
+      lastDate: latest18,
+    );
+    if (picked == null) return;
+    _dobCtrl.text =
+        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _pickVisaExpiry(BuildContext context) async {
+    final now = DateTime.now();
+    // Minimum 3 months from today — can't apply with an expiring visa
+    final minExpiry = DateTime(now.year, now.month + 3, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year + 1, now.month, now.day),
+      firstDate: minExpiry,
+      lastDate: DateTime(2100),
+    );
+    if (picked == null) return;
+    _visaExpiryCtrl.text =
+        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
   }
 
   // ---------------------------------------------------------------------------
@@ -364,15 +777,25 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
               // Date of birth
               TextFormField(
                 controller: _dobCtrl,
-                decoration: _dec('Date of Birth *', hint: '1990-01-31'),
-                keyboardType: TextInputType.datetime,
+                readOnly: true,
+                onTap: () => _pickDob(context),
+                decoration: _dec('Date of Birth *').copyWith(
+                  suffixIcon: const Icon(Icons.calendar_today_outlined,
+                      size: 20, color: _muted),
+                ),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) {
                     return 'Date of birth is required';
                   }
-                  if (DateTime.tryParse(v.trim()) == null) {
-                    return 'Use format YYYY-MM-DD';
-                  }
+                  final dob = DateTime.tryParse(v.trim());
+                  if (dob == null) return 'Invalid date';
+                  final now = DateTime.now();
+                  final age = now.year - dob.year -
+                      ((now.month < dob.month ||
+                              (now.month == dob.month && now.day < dob.day))
+                          ? 1
+                          : 0);
+                  if (age < 18) return 'You must be 18 or older to apply';
                   return null;
                 },
               ),
@@ -436,21 +859,56 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
                       : null,
                 ),
                 const SizedBox(height: 16),
+                // Course level dropdown
+                DropdownButtonFormField<String>(
+                  initialValue: _courseLevel,
+                  decoration: _dec('Course Level *'),
+                  items: _courseLevelOptions
+                      .map((opt) => DropdownMenuItem(
+                            value: opt.$1,
+                            child: Text(opt.$2),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setState(() => _courseLevel = v),
+                  validator: (v) =>
+                      v == null ? 'Course level is required' : null,
+                ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _visaExpiryCtrl,
+                  readOnly: true,
+                  onTap: () => _pickVisaExpiry(context),
                   decoration: _dec(
-                    'Visa Expiry Date (YYYY-MM-DD)',
-                    hint: '2026-12-31',
+                    'Visa Expiry Date',
+                    helperText:
+                        'Your visa must be valid for at least 3 months from today.',
+                  ).copyWith(
+                    suffixIcon: const Icon(Icons.calendar_today_outlined,
+                        size: 20, color: _muted),
                   ),
-                  keyboardType: TextInputType.datetime,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _otherEmploymentCtrl,
+                  decoration: _dec(
+                    'Other employer hours per week',
+                    hint: 'e.g. 8',
+                    helperText:
+                        'Hours you already work for other employers. Leave blank if none.',
+                  ),
+                  keyboardType: TextInputType.number,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
-                    if (DateTime.tryParse(v.trim()) == null) {
-                      return 'Use format YYYY-MM-DD';
+                    final n = int.tryParse(v.trim());
+                    if (n == null || n < 0) {
+                      return 'Enter a whole number of hours (0 or more)';
                     }
                     return null;
                   },
                 ),
+                // Evidence upload card
+                const SizedBox(height: 20),
+                _evidenceUploadCard(),
               ],
 
               // Notes for unknown / skilled_worker
@@ -504,7 +962,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
               SizedBox(
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _submitting ? null : _submit,
+                  onPressed: (_submitting || !_canSubmit) ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _accent,
                     foregroundColor: Colors.white,

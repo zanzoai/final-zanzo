@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
 
 class SpeechService with ChangeNotifier {
   final SpeechToText _speech = SpeechToText();
@@ -210,7 +211,7 @@ class SpeechService with ChangeNotifier {
           // _finalText intentionally NOT set — HomeScreen must not commit yet.
           // Cancel any restart already queued by _onStatus; we take over here.
           _restartTimer?.cancel();
-          if (kDebugMode) debugPrint('[Speech] auto-restart');
+          if (kDebugMode) dlog('[Speech] auto-restart');
           notifyListeners();
           _restartTimer = Timer(
             const Duration(milliseconds: _restartDelayMs),
@@ -221,7 +222,7 @@ class SpeechService with ChangeNotifier {
       }
 
       // Full stop (user-stopped, or 3-minute cap reached): commit everything.
-      if (kDebugMode && _userStopped) debugPrint('[Speech] stopped by user');
+      if (kDebugMode && _userStopped) dlog('[Speech] stopped by user');
       _restartTimer?.cancel();
       _restartTimer = null;
       _endedByStop = true;
@@ -261,7 +262,7 @@ class SpeechService with ChangeNotifier {
   void _onError(SpeechRecognitionError error) {
     if (kDebugMode && error.errorMsg != _lastLoggedError) {
       _lastLoggedError = error.errorMsg;
-      debugPrint('[Speech] error=${error.errorMsg}');
+      dlog('[Speech] error=${error.errorMsg}');
     }
     _isRecording = false;
     _currentPartial = '';

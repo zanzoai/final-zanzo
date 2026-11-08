@@ -5,6 +5,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
+import 'package:zanzo_frontend/core/widgets/error_state.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
 
 const _kBg = Color(0xFFFCFAF6);
 const _kInk = Color(0xFF26211C);
@@ -24,6 +27,7 @@ class CancelledRefundsScreen extends StatefulWidget {
 class _CancelledRefundsScreenState extends State<CancelledRefundsScreen> {
   List<Map<String, dynamic>> _jobs = [];
   bool _loading = true;
+  bool _error = false;
 
   @override
   void initState() {
@@ -32,7 +36,10 @@ class _CancelledRefundsScreenState extends State<CancelledRefundsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
     try {
       final res = await ApiService.getJson('/tasks/my');
       if (res.statusCode == 200) {
@@ -47,9 +54,11 @@ class _CancelledRefundsScreenState extends State<CancelledRefundsScreen> {
             }).toList();
           });
         }
+      } else {
+        setState(() => _error = true);
       }
     } catch (_) {
-      // network error — leave list empty
+      setState(() => _error = true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -65,17 +74,11 @@ class _CancelledRefundsScreenState extends State<CancelledRefundsScreen> {
   String _amount(Map<String, dynamic> j) {
     final amount = j['estimated_amount'];
     if (amount == null) return '';
-    final currency = (j['currency'] as String? ?? 'GBP').toUpperCase();
-    final symbol = currency == 'GBP'
-        ? '£'
-        : currency == 'INR'
-        ? '₹'
-        : currency;
-    final n = amount as num;
-    final formatted = n == n.truncateToDouble()
-        ? n.toStringAsFixed(0)
-        : n.toStringAsFixed(2);
-    return '$symbol$formatted';
+    return CurrencyFormatter.format(
+      amount as num,
+      j['currency'] as String?,
+      compact: true,
+    );
   }
 
   String _date(Map<String, dynamic> j) {
@@ -164,7 +167,12 @@ class _CancelledRefundsScreenState extends State<CancelledRefundsScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _kAccent))
+          ? const SkeletonJobList()
+          : (_error && _jobs.isEmpty)
+          ? ErrorState(
+              message: "We couldn't load this. Please try again.",
+              onRetry: _load,
+            )
           : _jobs.isEmpty
           ? _emptyState()
           : RefreshIndicator(

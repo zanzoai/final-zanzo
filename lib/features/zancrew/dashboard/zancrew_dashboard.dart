@@ -16,21 +16,26 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // ⭐ Supabase for realtime
 import 'package:zanzo_frontend/core/services/zancrew_earnings_service.dart';
+import 'package:zanzo_frontend/core/utils/currency.dart';
+import 'package:zanzo_frontend/core/widgets/error_state.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 
 import '../../../core/services/api_service.dart';
 import '../../../core/services/crew_offers_ws_service.dart';
 import '../../../core/services/uk_provider_api.dart';
 import '../../../core/services/zancrew_api.dart';
 import '../onboarding/uk_bank_details_screen.dart';
+import '../screens/student_vacation_request_screen.dart';
 import '../screens/zancrew_JobDetails.dart';
 import '../screens/zancrew_earnings_details.dart';
 import '../screens/zancrew_offer_detail.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class ZanCrewDashboard extends StatefulWidget {
   const ZanCrewDashboard({super.key});
@@ -55,6 +60,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   String? _crewUserId;
 
   bool _offersLoading = false;
+  bool _offersError = false;
   List<Map<String, dynamic>> _offers = const [];
 
   String _currentTab = 'offered';
@@ -62,10 +68,14 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   Timer? _locationTimer;
 
   double _todayEarnings = 0;
+  // Currency of the crew member's market, from the earnings API (GBP default).
+  String _earningsCurrency = 'GBP';
 
   String? _activeJobId;
   String? _activeJobTitle;
   String? _activeJobStatus;
+
+  bool _isApprovedStudent = false;
 
   static const List<String> _defaultBucketCatalog = [
     'Delivery',
@@ -125,7 +135,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _online && _crewUserId != null) {
-      debugPrint('[ZanCrew] app resumed — refreshing offers');
+      dlog('[ZanCrew] app resumed — refreshing offers');
       _refreshOffers(status: 'offered');
       _checkActiveJob();
     }
@@ -137,16 +147,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   void _initFcmOpenListeners() {
     // Notification tapped while app was in background
     _fcmOpenedSub = FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      debugPrint('[FCM] notification opened app — refreshing offers');
+      dlog('[FCM] notification opened app — refreshing offers');
       if (_online && _crewUserId != null) {
         _refreshOffers(status: 'offered');
       }
-    }, onError: (e) => debugPrint('[FCM] onMessageOpenedApp error: $e'));
+    }, onError: (e) => dlog('[FCM] onMessageOpenedApp error: $e'));
 
     // Notification tapped when app was fully terminated (cold start)
     FirebaseMessaging.instance.getInitialMessage().then((message) {
       if (message != null) {
-        debugPrint('[FCM] launched from notification tap — refreshing offers');
+        dlog('[FCM] launched from notification tap — refreshing offers');
         if (_online && _crewUserId != null) {
           _refreshOffers(status: 'offered');
         }
@@ -155,11 +165,18 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
     // Foreground FCM: new_offer arrives while the app is open — silent refresh
     _fcmForegroundSub = FirebaseMessaging.onMessage.listen((message) {
-      if (message.data['type'] == 'new_offer' && _online && mounted) {
-        debugPrint('[FCM] foreground new_offer — refreshing offers');
+      final type = message.data['type'];
+      if (type == 'new_offer' && _online && mounted) {
+        dlog('[FCM] foreground new_offer — refreshing offers');
         _refreshOffers(status: 'offered', showLoading: false);
+      } else if (type == 'crew_status_changed') {
+        // Admin force-offline twin of the WS crew.status_changed event.
+        // FCM values are strings ("true"/"false").
+        final isOnline = message.data['is_online'] == 'true';
+        dlog('[FCM] crew_status_changed is_online=$isOnline');
+        if (!isOnline) _applyForcedOffline();
       }
-    }, onError: (e) => debugPrint('[FCM] onMessage error: $e'));
+    }, onError: (e) => dlog('[FCM] onMessage error: $e'));
   }
 
   // ---------------------------------------------------------------------------
@@ -236,14 +253,14 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       newToken,
     ) async {
       final prefix = newToken.length >= 8 ? newToken.substring(0, 8) : '???';
-      debugPrint('[FCM] token refreshed token=$prefix…');
+      dlog('[FCM] token refreshed token=$prefix…');
       final platform = Platform.isIOS
           ? 'ios'
           : Platform.isAndroid
           ? 'android'
           : 'unknown';
       await ApiService.registerDeviceToken(token: newToken, platform: platform);
-    }, onError: (e) => debugPrint('[FCM] onTokenRefresh error: $e'));
+    }, onError: (e) => dlog('[FCM] onTokenRefresh error: $e'));
   }
 
   /// Request notification permission (iOS shows system dialog; Android 13+ also shows dialog).
@@ -256,12 +273,12 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         sound: true,
       );
       if (settings.authorizationStatus == AuthorizationStatus.denied) {
-        debugPrint('[FCM] notification permission denied');
+        dlog('[FCM] notification permission denied');
         return;
       }
       await _registerCurrentFcmToken();
     } catch (e) {
-      debugPrint('[FCM] _requestFcmPermissionAndRegister error: $e');
+      dlog('[FCM] _requestFcmPermissionAndRegister error: $e');
     }
   }
 
@@ -274,28 +291,28 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         for (int i = 0; i < 5; i++) {
           apns = await FirebaseMessaging.instance.getAPNSToken();
           if (apns != null) break;
-          debugPrint(
+          dlog(
             '[FCM] APNS token not ready, attempt ${i + 1}/5 — retrying in 1s…',
           );
           await Future.delayed(const Duration(seconds: 1));
         }
         if (apns == null) {
-          debugPrint(
+          dlog(
             '[FCM] APNS token still null after 5 attempts — skipping FCM registration',
           );
           return;
         }
         final apnsPrefix = apns.length >= 8 ? apns.substring(0, 8) : '???';
-        debugPrint('[FCM] APNS token ready apns=$apnsPrefix…');
+        dlog('[FCM] APNS token ready apns=$apnsPrefix…');
       }
 
       final token = await FirebaseMessaging.instance.getToken();
       if (token == null) {
-        debugPrint('[FCM] getToken() returned null');
+        dlog('[FCM] getToken() returned null');
         return;
       }
       final prefix = token.length >= 8 ? token.substring(0, 8) : '???';
-      debugPrint('[FCM] got token=$prefix…');
+      dlog('[FCM] got token=$prefix…');
       final platform = Platform.isIOS
           ? 'ios'
           : Platform.isAndroid
@@ -303,7 +320,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
           : 'unknown';
       await ApiService.registerDeviceToken(token: token, platform: platform);
     } catch (e) {
-      debugPrint('[FCM] _registerCurrentFcmToken error: $e');
+      dlog('[FCM] _registerCurrentFcmToken error: $e');
     }
   }
 
@@ -363,22 +380,27 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       _loading = false;
     });
 
-    // If SharedPreferences still says not enabled, live-check UK provider
-    // status — the admin may have approved via Supabase without the prefs
-    // being updated on this device.
-    if (!_zancrewEnabled && _crewUserId != null) {
-      try {
-        final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
-        if (ukStatus != null &&
-            ukStatus['provider_status'] == 'approved' &&
-            ukStatus['can_receive_offers'] == true) {
-          await prefs.setBool('zancrew_enabled', true);
-          if (mounted) setState(() => _zancrewEnabled = true);
-        }
-      } catch (_) {}
+    // ── FAST PATH: fetch offers immediately ────────────────────────────────
+    // Offers only need _crewUserId — not the online-sync POST, the UK status
+    // live-check, or the activation banner. Previously those three sequential
+    // network awaits ran BEFORE the offers fetch, delaying the list by 2–3
+    // round-trips. Kick offers off right away and mark online in the
+    // background (offers don't depend on that POST completing).
+    if (_online && _crewUserId != null) {
+      _startLocationUpdates();
+      _refreshOffers(status: _currentTab);
+      _connectOffersWs();
+      _startOfferPolling();
+      unawaited(
+        ZanCrewApi.setOnline(
+          userId: _crewUserId!,
+          online: true,
+        ).catchError((_) => false),
+      );
+    } else {
+      // Still refresh earnings even if offline, so earnings card is always current
+      _recalculateTodayEarningsFromOffers(_currentTab);
     }
-
-    await _maybeShowActivationBanner();
 
     // 🔔 FCM: start refresh listener once; silently re-register token if already online
     _initFcmRefreshListener();
@@ -386,20 +408,57 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       unawaited(_registerCurrentFcmToken());
     }
 
-    // CRITICAL FIX: re-sync backend
-    if (_online && _crewUserId != null) {
-      try {
-        await ZanCrewApi.setOnline(userId: _crewUserId!, online: true);
-      } catch (_) {}
-
-      _startLocationUpdates();
-      _refreshOffers(status: _currentTab);
-      _connectOffersWs();
-      _startOfferPolling();
-    } else {
-      // Still refresh earnings even if offline, so earnings card is always current
-      _recalculateTodayEarningsFromOffers(_currentTab);
-    }
+    // ── BACKGROUND: UK approval live-check + activation banner ──────────────
+    // These used to block the offers fetch. The UK provider status check only
+    // applies to UK users — India users have no UK record, so skip that
+    // (otherwise-wasted, timeout-prone) call for them entirely.
+    final isIndia =
+        prefs.getString('country_code') == 'IN' ||
+        (prefs.getString('user_phone')?.startsWith('+91') ?? false);
+    unawaited(() async {
+      // If SharedPreferences still says not enabled, live-check the server —
+      // the account may be an approved crew whose enabled flag simply isn't in
+      // THIS device's prefs yet (e.g. a fresh iOS install, or a crew that was
+      // approved on another device). Without this, switching to work mode shows
+      // "ZanCrew Mode is OFF" instead of the online toggle.
+      if (!_zancrewEnabled && _crewUserId != null) {
+        // Region-agnostic: the zan_crew profile row is `active` (and
+        // can_receive_offers) after approval via BOTH the /become and UK flows,
+        // so this also covers India crew — for whom the UK-only check below is
+        // skipped entirely. See [[zanzo-crew-status-rule]].
+        try {
+          final profile = await ZanCrewApi.getProfile(_crewUserId);
+          final status = (profile?['status'] ?? '').toString().toLowerCase();
+          final canReceive = profile?['can_receive_offers'] == true;
+          if (status == 'active' || canReceive) {
+            await prefs.setBool('zancrew_enabled', true);
+            if (mounted) setState(() => _zancrewEnabled = true);
+          }
+        } catch (_) {}
+      }
+      // UK provider status is fetched on every launch (not gated on
+      // !_zancrewEnabled) so that _isApprovedStudent is always correct after
+      // admin approval — including on second and subsequent launches once
+      // zancrew_enabled is already true in SharedPreferences.
+      if (!isIndia && _crewUserId != null) {
+        try {
+          final ukStatus = await UkProviderApi.getStatus(_crewUserId!);
+          if (ukStatus != null) {
+            final isApproved = ukStatus['provider_status'] == 'approved';
+            final canReceive = ukStatus['can_receive_offers'] == true;
+            final isStudent = ukStatus['declared_work_status'] == 'student_visa';
+            if (!_zancrewEnabled && isApproved && canReceive) {
+              await prefs.setBool('zancrew_enabled', true);
+              if (mounted) setState(() => _zancrewEnabled = true);
+            }
+            if (mounted) {
+              setState(() => _isApprovedStudent = isApproved && isStudent);
+            }
+          }
+        } catch (_) {}
+      }
+      if (mounted) await _maybeShowActivationBanner();
+    }());
 
     unawaited(_checkActiveJob());
   }
@@ -455,9 +514,10 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
     _locationTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       try {
+        // Bounded so a missing GPS fix can't pile up waiting calls every 15 s.
         final pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
-        );
+        ).timeout(const Duration(seconds: 12));
 
         if (_crewUserId == null) return;
 
@@ -525,7 +585,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       Position? pos = await Geolocator.getLastKnownPosition();
 
       if (pos == null) {
-        debugPrint(
+        dlog(
           '[ZanCrew] no last known position — trying current (medium)',
         );
         pos = await Geolocator.getCurrentPosition(
@@ -534,16 +594,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       }
 
       if (pos == null) {
-        debugPrint('[ZanCrew] pre-online: no position available');
+        dlog('[ZanCrew] pre-online: no position available');
         return;
       }
 
       if (pos.latitude == 0.0 && pos.longitude == 0.0) {
-        debugPrint('[ZanCrew] pre-online: ignoring (0,0) coordinates');
+        dlog('[ZanCrew] pre-online: ignoring (0,0) coordinates');
         return;
       }
 
-      debugPrint(
+      dlog(
         '[ZanCrew] pre-online location: ${pos.latitude},${pos.longitude}',
       );
       await ApiService.postCrewLocationUpdate(
@@ -552,7 +612,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         lng: pos.longitude,
       );
     } catch (e) {
-      debugPrint('[ZanCrew] pre-online location push failed (non-fatal): $e');
+      dlog('[ZanCrew] pre-online location push failed (non-fatal): $e');
     }
   }
 
@@ -562,7 +622,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       try {
         final serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (!serviceEnabled) {
-          debugPrint('[ZanCrew] location service disabled');
+          dlog('[ZanCrew] location service disabled');
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -581,7 +641,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         }
         if (perm == LocationPermission.denied ||
             perm == LocationPermission.deniedForever) {
-          debugPrint('[ZanCrew] location permission denied: $perm');
+          dlog('[ZanCrew] location permission denied: $perm');
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -595,9 +655,9 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
           return;
         }
 
-        debugPrint('[ZanCrew] location permission ok: $perm');
+        dlog('[ZanCrew] location permission ok: $perm');
       } catch (e) {
-        debugPrint('[ZanCrew] location check error: $e');
+        dlog('[ZanCrew] location check error: $e');
         // Non-fatal: permission check itself failed — allow online and let
         // the location timer handle retries gracefully.
       }
@@ -645,8 +705,39 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         _refreshOffers(status: _currentTab, showLoading: false);
     svc.onTaskCancelled = (_) =>
         _refreshOffers(status: _currentTab, showLoading: false);
+    svc.onStatusChanged = (isOnline) {
+      if (!isOnline) _applyForcedOffline();
+    };
     svc.connect();
     _wsOffers = svc;
+  }
+
+  /// Applies an admin force-offline (from the `crew.status_changed` WS event or
+  /// the `crew_status_changed` FCM twin). Flips the local toggle offline and
+  /// tears down offer activity WITHOUT calling the backend (it already set the
+  /// state). Idempotent — safe if both the WS event and the push arrive.
+  Future<void> _applyForcedOffline() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('zancrew_online', false);
+    if (!mounted) {
+      _online = false;
+      return;
+    }
+    if (!_online && _offers.isEmpty) return; // already offline — nothing to do
+    setState(() {
+      _online = false;
+      _offers = <Map<String, dynamic>>[];
+    });
+    _locationTimer?.cancel();
+    _stopOfferPolling();
+    // Defer the offers-WS teardown so we don't dispose it from inside its own
+    // event callback.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _disconnectOffersWs());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('An admin has set you offline.'),
+      ),
+    );
   }
 
   void _disconnectOffersWs() {
@@ -689,16 +780,17 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       if (!mounted) return;
       setState(() {
         _offers = list;
+        _offersError = false;
       });
 
       _recalculateTodayEarningsFromOffers(effStatus);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to load offers. Please try again.'),
-        ),
-      );
+      // No snackbar — a failed (often background/poll) refresh must never
+      // interrupt the user, especially when offers are already on screen.
+      // Only surface an inline error state, and only when the list is empty
+      // (see _buildOffersList); otherwise keep showing what we have.
+      setState(() => _offersError = true);
     } finally {
       if (showLoading && mounted) setState(() => _offersLoading = false);
     }
@@ -724,9 +816,13 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
     try {
       final result = await ZanCrewEarningsService.getEarnings(_crewUserId!);
       final todayPaise = result["today_paise"] ?? 0;
+      final currency = result["currency"]?.toString();
 
       setState(() {
         _todayEarnings = todayPaise / 100;
+        if (currency != null && currency.isNotEmpty) {
+          _earningsCurrency = currency.toUpperCase();
+        }
       });
     } catch (_) {
       // ignore for MVP
@@ -786,8 +882,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
     try {
       final v = (p is num) ? p.toDouble() : double.parse(p.toString());
-      final whole = v.truncateToDouble();
-      return '£${v.toStringAsFixed(whole == v ? 0 : 2)}';
+      return CurrencyFormatter.format(
+        v,
+        o['currency']?.toString() ?? _earningsCurrency,
+        compact: true,
+      );
     } catch (_) {
       return '';
     }
@@ -799,11 +898,7 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
 
     try {
       final v = (d is num) ? d.toDouble() : double.parse(d.toString());
-      if (v < 1.0) {
-        final meters = (v * 1000).round();
-        return '$meters m';
-      }
-      return '${v.toStringAsFixed(1)} km';
+      return Market.distance(v);
     } catch (_) {
       return '';
     }
@@ -836,10 +931,10 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
       builder: (ctx) {
         return Padding(
           padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom,
           ),
           child: StatefulBuilder(
             builder: (ctx, setLocal) {
@@ -849,30 +944,39 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Drag handle
                     Center(
                       child: Container(
                         width: 36,
                         height: 4,
-                        margin: const EdgeInsets.only(bottom: 12),
+                        margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: Colors.black26,
+                          color: _border,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
+                    // Title
                     const Text(
                       'Edit Preferences',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
+                        color: _ink,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Section: Categories
+                    const Text(
+                      'CATEGORIES',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _muted,
+                        letterSpacing: 0.7,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Text(
-                      'Categories',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -881,8 +985,17 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                         return FilterChip(
                           label: Text(b),
                           selected: selected,
-                          selectedColor: _accent.withValues(alpha: 0.15),
+                          selectedColor: _accent.withValues(alpha: 0.14),
                           checkmarkColor: _accent,
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                            color: selected ? _accent.withValues(alpha: 0.5) : _border,
+                          ),
+                          labelStyle: TextStyle(
+                            color: selected ? _accent : _ink,
+                            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                            fontSize: 13,
+                          ),
                           onSelected: (v) {
                             setLocal(() {
                               if (v) {
@@ -895,40 +1008,144 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Radius (km)',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
+                    const SizedBox(height: 20),
+                    // Section: Radius
                     Row(
                       children: [
-                        Expanded(
-                          child: Slider(
-                            value: tempRadius.clamp(1, 50),
-                            min: 1,
-                            max: 50,
-                            divisions: 49,
-                            activeColor: _accent,
-                            label: '${tempRadius.toStringAsFixed(0)} km',
-                            onChanged: (v) => setLocal(() => tempRadius = v),
+                        const Text(
+                          'RADIUS',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _muted,
+                            letterSpacing: 0.7,
                           ),
                         ),
-                        SizedBox(
-                          width: 48,
-                          child: Text(
-                            tempRadius.toStringAsFixed(0),
-                            textAlign: TextAlign.right,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                        const Spacer(),
+                        Text(
+                          Market.radius(tempRadius, precise: true),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _accent,
                           ),
                         ),
                       ],
                     ),
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                        activeTrackColor: _accent,
+                        inactiveTrackColor: _border,
+                        thumbColor: _accent,
+                        overlayColor: _accent.withValues(alpha: 0.12),
+                      ),
+                      child: Slider(
+                        value: tempRadius.clamp(1, 50),
+                        min: 1,
+                        max: 50,
+                        divisions: 49,
+                        label: Market.radius(tempRadius, precise: true),
+                        onChanged: (v) => setLocal(() => tempRadius = v),
+                      ),
+                    ),
+                    // Student Visa vacation entry
+                    if (_isApprovedStudent) ...[
+                      const SizedBox(height: 8),
+                      const Divider(height: 1, color: _border),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'STUDENT VISA',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _muted,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Material(
+                        color: _surface,
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () {
+                            Navigator.pop(ctx, false);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const StudentVacationRequestScreen(),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.beach_access_outlined,
+                                    color: _accent,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Request Vacation Work Hours',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                          color: _ink,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Apply to work above your term-time limit during holidays.',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: _muted,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: _muted,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    // Actions
+                    const Divider(height: 1, color: _border),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel'),
+                          style: TextButton.styleFrom(foregroundColor: _muted),
+                          child: const Text('Cancel',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
                         ElevatedButton(
@@ -938,11 +1155,15 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _accent,
                             foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 28, vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text('Save'),
+                          child: const Text('Save',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
                         ),
                       ],
                     ),
@@ -1275,12 +1496,6 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: _accent)),
-      );
-    }
-
     final isInbox = _currentTab == 'offered';
     final tabIndex = isInbox ? 0 : 1;
 
@@ -1353,9 +1568,14 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
         ),
         body: Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: !_zancrewEnabled
-              ? _buildZanCrewOffBody(context)
-              : _buildZanCrewOnBody(context, isInbox),
+          // While the initial load runs, keep the header + tabs visible and
+          // shimmer only the content area — shaped like the online dashboard
+          // (earnings card + online toggle + offer list).
+          child: _loading
+              ? _dashboardSkeleton()
+              : (!_zancrewEnabled
+                    ? _buildZanCrewOffBody(context)
+                    : _buildZanCrewOnBody(context, isInbox)),
         ),
       ),
     );
@@ -1415,6 +1635,61 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   // SUB-UI — ZanCrew enabled
   // ---------------------------------------------------------------------------
+  // Loading shimmer shaped like the online dashboard: earnings summary card,
+  // online-toggle card, then the offer list.
+  Widget _dashboardSkeleton() {
+    return Column(
+      children: [
+        Shimmer(
+          child: Column(
+            children: [
+              const SkeletonCard(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SkeletonBone(width: 110, height: 12),
+                        SizedBox(height: 12),
+                        SkeletonBone(width: 80, height: 22),
+                      ],
+                    ),
+                    SkeletonBone(
+                      width: 44,
+                      height: 44,
+                      radius: BorderRadius.all(Radius.circular(12)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const SkeletonCard(
+                padding: EdgeInsets.fromLTRB(14, 14, 14, 14),
+                child: Row(
+                  children: [
+                    Expanded(child: SkeletonLine(widthFactor: 0.4, height: 15)),
+                    SizedBox(width: 12),
+                    SkeletonBone(
+                      width: 46,
+                      height: 26,
+                      radius: BorderRadius.all(Radius.circular(14)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Expanded(
+          child: SkeletonOfferList(padding: EdgeInsets.fromLTRB(0, 4, 0, 16)),
+        ),
+      ],
+    );
+  }
+
   Widget _buildZanCrewOnBody(BuildContext context, bool isInbox) {
     return Column(
       children: [
@@ -1477,9 +1752,11 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // EARNINGS CARD
   // ---------------------------------------------------------------------------
   Widget _buildEarningsCard(BuildContext context) {
-    final todayLabel = _todayEarnings <= 0
-        ? '£0'
-        : '£${_todayEarnings.toStringAsFixed(_todayEarnings.truncateToDouble() == _todayEarnings ? 0 : 2)}';
+    final todayLabel = CurrencyFormatter.format(
+      _todayEarnings < 0 ? 0 : _todayEarnings,
+      _earningsCurrency,
+      compact: true,
+    );
 
     return InkWell(
       borderRadius: BorderRadius.circular(18),
@@ -1542,7 +1819,16 @@ class _ZanCrewDashboardState extends State<ZanCrewDashboard>
   // ---------------------------------------------------------------------------
   Widget _buildOffersList(bool isInbox) {
     if (_offersLoading) {
-      return const Center(child: CircularProgressIndicator(color: _accent));
+      return const SkeletonOfferList();
+    }
+
+    // Error only when there's nothing to show — a background refresh failing
+    // while offers are on screen keeps the existing list.
+    if (_offers.isEmpty && _offersError) {
+      return ErrorState(
+        message: "We couldn't load offers. Please try again.",
+        onRetry: () => _refreshOffers(status: _currentTab),
+      );
     }
 
     if (_offers.isEmpty) {

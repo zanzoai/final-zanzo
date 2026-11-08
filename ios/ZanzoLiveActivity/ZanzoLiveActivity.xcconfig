@@ -1,0 +1,4 @@
+// Build config for the ZanzoLiveActivity widget extension.
+// Reuses the same local, gitignored signing team as the app so each dev signs
+// with their own Apple Developer Team. See ios/TEAM_SETUP.md.
+#include? "../Flutter/Signing.xcconfig"

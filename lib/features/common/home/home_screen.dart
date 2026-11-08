@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Core
+import 'package:zanzo_frontend/core/theme/app_theme.dart';
 import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/services/auth.dart';
 import 'package:zanzo_frontend/core/services/speech_service.dart';
@@ -28,14 +29,17 @@ import 'package:zanzo_frontend/features/user/widgets/login_prompt_dialog.dart';
 // ZanCrew
 import 'package:zanzo_frontend/features/zancrew/gateway/zancrew_gateway.dart';
 import 'package:zanzo_frontend/features/zancrew/screens/zancrew_JobDetails.dart';
+import 'package:zanzo_frontend/core/utils/log.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
-// Design tokens — scoped to this file
-const _kGround = Color(0xFFFCFAF6); // cream — kept in sync with native splash
-const _kInk = Color(0xFF3B2A1E); // warm dark brown (was cold charcoal)
-const _kSaffron = Color(
-  0xFFE8720C,
-); // richer brand orange (was amber-leaning #D97706)
-const _kMuted = Color(0xFF8C7B6E); // warmer taupe (was neutral grey)
+// Design tokens now live centrally in AppTheme. These aliases keep the many
+// call-sites terse while sourcing every value from the single token file, so
+// the brand is defined once — see lib/core/theme/app_theme.dart.
+const _kGround = AppColors.ground;
+const _kInk = AppColors.ink;
+const _kSaffron = AppColors.saffron;
+const _kMuted = AppColors.muted;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -44,7 +48,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // ---------------------------------------------------------------------------
   // INPUT + RESPONSE
   // ---------------------------------------------------------------------------
@@ -120,10 +124,10 @@ class _HomeScreenState extends State<HomeScreen>
   );
 
   // ---------------------------------------------------------------------------
-  // EXAMPLES TICKER — UK-relevant tasks, global names
+  // EXAMPLES TICKER — one list per market (UK is the default)
   // ---------------------------------------------------------------------------
 
-  final List<_Example> _examples = const [
+  static const List<_Example> _ukExamples = [
     _Example(
       emoji: '📦',
       name: 'Emma',
@@ -173,8 +177,57 @@ class _HomeScreenState extends State<HomeScreen>
     ),
   ];
 
+  static const List<_Example> _inExamples = [
+    _Example(
+      emoji: '📦',
+      name: 'Priya',
+      text: 'Collect my parcel from the courier office and bring it to my flat.',
+    ),
+    _Example(
+      emoji: '📄',
+      name: 'Arjun',
+      text: 'Pick up documents from my office and drop them at my home.',
+    ),
+    _Example(
+      emoji: '🔑',
+      name: 'Ananya',
+      text: 'Hand over spare keys to my tenant arriving at 6 PM.',
+    ),
+    _Example(
+      emoji: '🧺',
+      name: 'Rahul',
+      text: 'Drop my clothes at the laundry and collect them in the evening.',
+    ),
+    _Example(
+      emoji: '🏠',
+      name: 'Sneha',
+      text: 'Wait at my flat for the internet technician between 2 and 4 PM.',
+    ),
+    _Example(
+      emoji: '🎁',
+      name: 'Vikram',
+      text: 'Collect a gift from the shop and deliver it to my friend nearby.',
+    ),
+    _Example(
+      emoji: '📚',
+      name: 'Meera',
+      text: 'Return two borrowed books to the library near my home.',
+    ),
+    _Example(
+      emoji: '🎒',
+      name: 'Karan',
+      text: 'Collect my bag from a friend nearby and bring it to me.',
+    ),
+  ];
+
+  // Examples for the user's market: India → Indian examples, otherwise UK.
+  List<_Example> _examples = _ukExamples;
+
   int _exIndex = 0;
-  String _typed = '';
+  // The typing effect ticks every 26 ms. It updates this notifier, which only
+  // the "Happening near you" card listens to — calling setState here rebuilt
+  // the entire home screen ~38 times a second, nonstop.
+  final ValueNotifier<String> _typed = ValueNotifier<String>('');
   Timer? _typeTimer;
   Timer? _holdTimer;
 
@@ -182,9 +235,13 @@ class _HomeScreenState extends State<HomeScreen>
   // INIT
   // ---------------------------------------------------------------------------
 
+  // Throttle for resume-time location syncs (avoid a call on every app switch).
+  DateTime? _lastResumeLocSync;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _registerFcmTokenIfLoggedIn();
     _loadUser();
     _loadZancrewFromPrefs();
@@ -258,13 +315,61 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _typeTimer?.cancel();
     _holdTimer?.cancel();
+    _typed.dispose();
     _countdownTimer?.cancel();
     _glowCtrl.dispose();
     _controller.dispose();
     _voice.disposeAll();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // Catches the user returning from device Settings after granting location
+      // permission — sync location so country_code is set before they post.
+      _syncLocationOnResume();
+      // Refresh the active-task banners so someone who backgrounded/closed the
+      // app mid-task sees (and can tap back into) their current job on Home.
+      _checkActiveJob();
+      _checkCustomerActiveTask();
+    }
+  }
+
+  // Best-effort, silent location sync on resume. Does NOT prompt for permission
+  // (only checks) and never blocks or shows errors. Throttled so rapid app
+  // switches don't spam the endpoint.
+  Future<void> _syncLocationOnResume() async {
+    try {
+      final now = DateTime.now();
+      if (_lastResumeLocSync != null &&
+          now.difference(_lastResumeLocSync!) < const Duration(seconds: 60)) {
+        return;
+      }
+
+      final token = await TokenStore.accessToken();
+      if (token == null || token.isEmpty) return; // not signed in
+
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      final permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        return; // permission not granted — don't prompt on resume
+      }
+
+      _lastResumeLocSync = now;
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      ).timeout(const Duration(seconds: 8));
+
+      await ApiService.setUserLocation(lat: pos.latitude, lng: pos.longitude);
+    } catch (_) {
+      // Silent — resume sync must never surface an error to the user.
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -273,24 +378,28 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _registerFcmTokenIfLoggedIn() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final accessToken = prefs.getString('access_token');
+      final accessToken = await TokenStore.accessToken();
       if (accessToken == null || accessToken.isEmpty) return;
       final token = await FirebaseMessaging.instance.getToken();
       if (token == null) return;
       final platform = Platform.isIOS ? 'ios' : 'android';
       await ApiService.registerDeviceToken(token: token, platform: platform);
     } catch (e) {
-      debugPrint('[FCM] customer token registration error: $e');
+      dlog('[FCM] customer token registration error: $e');
     }
   }
 
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+    await Market.load();
+    final isIndia = Market.isIndia;
+    if (!mounted) return;
     setState(() {
       _userName = prefs.getString('user_name');
       _userPhone = prefs.getString('user_phone');
+      _examples = isIndia ? _inExamples : _ukExamples;
+      _exIndex = _exIndex % _examples.length;
     });
   }
 
@@ -318,7 +427,12 @@ class _HomeScreenState extends State<HomeScreen>
 
     try {
       final profile = await ZanCrewApi.getProfile(userId);
-      if (profile == null) return;
+      if (profile == null) {
+        // No crew profile: not a crew member.
+        await prefs.setString('zancrew_status', 'off');
+        await prefs.setBool('zancrew_enabled', false);
+        return;
+      }
 
       final status = (profile['status'] as String?) ?? 'pending';
       final active = status == 'active';
@@ -404,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
       if (data != null && data['active'] == true) {
         final taskId = data['task_id']?.toString();
-        final taskTitle = data['title']?.toString();
+        final taskTitle = (data['short_title'] ?? data['title'])?.toString();
         final taskStatus = data['status']?.toString();
         final taskLocation = data['location_address']?.toString();
 
@@ -427,6 +541,9 @@ class _HomeScreenState extends State<HomeScreen>
           _didAutoOpenCustomerActiveTaskThisSession = true;
           WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (!mounted) return;
+            // Skip if a TrackJobScreen for this job is already open (e.g. one
+            // already pushed via the Live Activity deep link) so we don't stack.
+            if (TrackJobScreen.isOpenForJob(taskId)) return;
             await Navigator.push(
               context,
               MaterialPageRoute(
@@ -525,6 +642,7 @@ class _HomeScreenState extends State<HomeScreen>
     final signedIn = await Auth.requireSignIn(context);
     if (!signedIn || !mounted) return;
     await _loadUser(); // keep greeting / avatar in sync after first login
+    unawaited(_backgroundSyncZanCrew()); // and the Work toggle
 
     setState(() {
       _isLoading = true;
@@ -552,8 +670,7 @@ class _HomeScreenState extends State<HomeScreen>
           desiredAccuracy: LocationAccuracy.high,
         ).timeout(const Duration(seconds: 8));
       } catch (locErr) {
-        // ignore: avoid_print
-        print('[Home] Location error: $locErr');
+        dlog('[Home] Location error: $locErr');
 
         // Set to true only when intentionally testing locally without a GPS fix.
         // Must remain false for any real device or production testing.
@@ -562,8 +679,7 @@ class _HomeScreenState extends State<HomeScreen>
 
         // ignore: dead_code
         if (allowZeroCoordsForLocalDev) {
-          // ignore: avoid_print
-          print(
+          dlog(
             '[Home] DEV OVERRIDE: falling back to 0.0,0.0 for local testing',
           );
         } else {
@@ -582,8 +698,29 @@ class _HomeScreenState extends State<HomeScreen>
         }
       }
 
-      // ignore: avoid_print
-      print(
+      // ── Sync the freshly-fetched location to the backend ─────────────────
+      // setUserLocation returns a new JWT with country_code embedded, which
+      // task creation depends on. At login this sync is best-effort and is
+      // skipped if permission was still denied — so a user who granted location
+      // afterwards (e.g. from device Settings) would otherwise never have their
+      // country set. Re-syncing here guarantees the first post picks up the now-
+      // granted location. Await only when country_code isn't set yet (so
+      // processTask uses the refreshed token); otherwise keep it non-blocking.
+      if (pos != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final hasCountry = (prefs.getString('country_code') ?? '').isNotEmpty;
+        final syncFuture = ApiService.setUserLocation(
+          lat: pos.latitude,
+          lng: pos.longitude,
+        );
+        if (hasCountry) {
+          unawaited(syncFuture);
+        } else {
+          await syncFuture;
+        }
+      }
+
+      dlog(
         '[Home] → calling ApiService.processTask lat=${pos?.latitude ?? 0.0} lng=${pos?.longitude ?? 0.0}',
       );
       final data = await ApiService.processTask(
@@ -591,8 +728,7 @@ class _HomeScreenState extends State<HomeScreen>
         latitude: pos?.latitude ?? 0.0,
         longitude: pos?.longitude ?? 0.0,
       );
-      // ignore: avoid_print
-      print('[Home] ← ApiService.processTask returned: $data');
+      dlog('[Home] ← ApiService.processTask returned: $data');
 
       if (!mounted) return;
 
@@ -653,8 +789,7 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('[Home] _sendRequest error: $e');
+      dlog('[Home] _sendRequest error: $e');
       if (!mounted) return;
       setState(() {
         _response =
@@ -676,6 +811,7 @@ class _HomeScreenState extends State<HomeScreen>
       final ok = await showLoginPrompt(context);
       if (!ok) return;
       await _loadUser();
+      unawaited(_backgroundSyncZanCrew());
     }
 
     if (!mounted) return;
@@ -703,7 +839,7 @@ class _HomeScreenState extends State<HomeScreen>
     _holdTimer?.cancel();
 
     _exIndex = idx % _examples.length;
-    _typed = '';
+    _typed.value = '';
     final full = _examples[_exIndex].text;
 
     _typeTimer = Timer.periodic(const Duration(milliseconds: 26), (t) {
@@ -712,8 +848,9 @@ class _HomeScreenState extends State<HomeScreen>
         return;
       }
 
-      if (_typed.length < full.length) {
-        setState(() => _typed = full.substring(0, _typed.length + 1));
+      final typed = _typed.value;
+      if (typed.length < full.length) {
+        _typed.value = full.substring(0, typed.length + 1);
       } else {
         t.cancel();
         _holdTimer = Timer(const Duration(milliseconds: 1600), () {
@@ -722,8 +859,6 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
     });
-
-    setState(() {});
   }
 
   void _onExampleTap() {
@@ -748,6 +883,7 @@ class _HomeScreenState extends State<HomeScreen>
       final ok = await showLoginPrompt(context);
       if (!ok) return;
       await _loadUser(); // sync name/phone into state after login
+      await _backgroundSyncZanCrew();
     }
 
     if (!mounted) return;
@@ -775,9 +911,15 @@ class _HomeScreenState extends State<HomeScreen>
     // leaving a blank void on compact ones.
     final screenH = MediaQuery.of(context).size.height;
     final t = ((screenH - 667.0) / 265.0).clamp(0.0, 1.0);
-    final topPad = 48.0 + t * 12.0; // 48–60 — clears the Positioned overlay row
-    final heroGap =
-        20.0 + t * 4.0; // 20–24 — breathing room between wordmark and hero
+    // While the keyboard is open the fixed top chrome collapses so the input
+    // card keeps its full height (otherwise its Expanded is squeezed below its
+    // min height and the column overflows — the "bottom overflowed" error).
+    final topPad = keyboardOpen
+        ? 52.0 // still clears the Positioned pill/avatar overlay row
+        : 48.0 + t * 12.0; // 48–60 — clears the Positioned overlay row
+    final heroGap = keyboardOpen
+        ? 8.0
+        : 20.0 + t * 4.0; // 20–24 — breathing room between wordmark and hero
 
     // Hero is supportive — input card is the visual center.
     final heroFontSize = (18.0 + t * 6.0).clamp(18.0, 24.0);
@@ -793,411 +935,464 @@ class _HomeScreenState extends State<HomeScreen>
             padding: const EdgeInsets.symmetric(horizontal: 22.0),
             child: Stack(
               children: [
-                // Main column fills SafeArea height.
-                // Expanded in the middle section vertically centres the input
-                // card between the hero text and the bottom card on any device.
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    SizedBox(height: topPad),
-
-                    // ── Compact wordmark with saffron underline ────────────
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Zanzo',
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w700,
-                            color: _kSaffron,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Container(
-                          width: 18,
-                          height: 1.5,
-                          decoration: BoxDecoration(
-                            color: _kSaffron,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    SizedBox(height: heroGap),
-
-                    // ── Hero ──────────────────────────────────────────────
-                    Text.rich(
-                      TextSpan(
-                        style: TextStyle(
-                          fontSize: heroFontSize,
-                          fontWeight: FontWeight.w600,
-                          height: 1.0,
-                          letterSpacing: -0.5,
-                        ),
-                        children: const [
-                          TextSpan(
-                            text: 'Hire a human\n',
-                            style: TextStyle(color: _kInk),
-                          ),
-                          TextSpan(
-                            text: 'near you',
-                            style: TextStyle(color: _kSaffron),
-                          ),
-                        ],
+                // Main column fills SafeArea height and SCROLLS when the
+                // keyboard shrinks the viewport, so it can never overflow on
+                // any device / font scale:
+                //  • ConstrainedBox(minHeight) keeps the Expanded-centred
+                //    layout when there's room (content == viewport height);
+                //  • IntrinsicHeight lets the Expanded work inside the scroll
+                //    view (which otherwise gives unbounded height);
+                //  • SingleChildScrollView absorbs any height deficit.
+                LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      (_userName != null && _userName!.trim().isNotEmpty)
-                          ? 'Hi ${_userName!.trim().split(' ').first} — tell us what you need.'
-                          : "Tell Zanzo what you need — we'll turn it into action.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: subtitleFontSize,
-                        color: _kMuted,
-                        fontWeight: FontWeight.w400,
-                        height: 1.4,
-                      ),
-                    ),
-
-                    // ── Input card + trust strip — vertically centred ─────
-                    // Expanded absorbs the space between the hero text and the
-                    // bottom "Happening near you" section so the input sits at
-                    // the true visual midpoint on every screen size.
-                    // The bottom padding biases the column slightly above centre,
-                    // which reads more naturally when the hero text sits close
-                    // above and the bottom card is anchored below.
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(bottom: keyboardOpen ? 0 : 60),
+                      child: IntrinsicHeight(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            // ── Elevated prompt card ──────────────────────────
-                            AnimatedBuilder(
-                              animation: _glowAnim,
-                              builder: (context, _) {
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    // Subtle warm gradient — top bright white,
-                                    // base drifts toward the off-white ground colour.
-                                    // Gives a softly lifted, premium surface feel
-                                    // without blur or heavy effects.
-                                    gradient: const LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Color(0xFFFFFFFF), // bright white top
-                                        Color(0xFFFEFBF6), // warm tinted base
+                            SizedBox(height: topPad),
+
+                            // ── Compact wordmark with saffron underline ────────────
+                            // Hidden while typing to free vertical room for the keyboard.
+                            if (!keyboardOpen)
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('Zanzo', style: AppText.wordmark),
+                                  const SizedBox(height: 6),
+                                  // Small saffron "voice bar" under the wordmark
+                                  Container(
+                                    width: 22,
+                                    height: 3,
+                                    decoration: BoxDecoration(
+                                      gradient: AppGradients.saffronAction,
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                            SizedBox(height: heroGap),
+
+                            // ── Hero ──────────────────────────────────────────────
+                            // Hidden while typing to free vertical room for the keyboard.
+                            if (!keyboardOpen)
+                              Text.rich(
+                                TextSpan(
+                                  style: TextStyle(
+                                    fontSize: heroFontSize,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.0,
+                                    letterSpacing: -0.5,
+                                  ),
+                                  children: const [
+                                    TextSpan(
+                                      text: 'Hire a human\n',
+                                      style: TextStyle(color: _kInk),
+                                    ),
+                                    TextSpan(
+                                      text: 'near you',
+                                      style: TextStyle(color: _kSaffron),
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            // Subtitle hidden while typing to free vertical room.
+                            if (!keyboardOpen) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                (_userName != null &&
+                                        _userName!.trim().isNotEmpty)
+                                    ? 'Hi ${_userName!.trim().split(' ').first} — tell us what you need.'
+                                    : "Tell Zanzo what you need — we'll turn it into action.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: subtitleFontSize,
+                                  color: _kMuted,
+                                  fontWeight: FontWeight.w400,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+
+                            // ── Input card + trust strip — vertically centred ─────
+                            // Expanded absorbs the space between the hero text and the
+                            // bottom "Happening near you" section so the input sits at
+                            // the true visual midpoint on every screen size.
+                            // The bottom padding biases the column slightly above centre,
+                            // which reads more naturally when the hero text sits close
+                            // above and the bottom card is anchored below.
+                            Expanded(
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: keyboardOpen ? 0 : 60,
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    // ── Elevated prompt card ──────────────────────────
+                                    AnimatedBuilder(
+                                      animation: _glowAnim,
+                                      builder: (context, child) {
+                                        return Container(
+                                          decoration: BoxDecoration(
+                                            // Softly-lifted paper surface that
+                                            // "breathes" with the glow anim —
+                                            // the tactile hero of the voice-first
+                                            // home. All values come from AppTheme.
+                                            gradient: AppGradients.liftedCard,
+                                            borderRadius: AppRadii.cardR,
+                                            border: Border.all(
+                                              color: AppColors.hairline(0.08),
+                                            ),
+                                            boxShadow: AppShadows.lifted(
+                                              _glowAnim.value,
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 18,
+                                            vertical: 14,
+                                          ),
+                                          child: child,
+                                        );
+                                      },
+                                      // Built once; only the decoration
+                                      // above re-runs on each animation frame.
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Expanded(
+                                            child: ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                minHeight: 100,
+                                                maxHeight: 200,
+                                              ),
+                                              child: TextField(
+                                                controller: _controller,
+                                                // Editing the request clears
+                                                // the previous error message.
+                                                onChanged: (_) => setState(() {
+                                                  _policyMessage = null;
+                                                  _response = '';
+                                                }),
+                                                onSubmitted: (_) => canSend
+                                                    ? _sendRequest()
+                                                    : null,
+                                                minLines: 4,
+                                                maxLines: 8,
+                                                keyboardType:
+                                                    TextInputType.multiline,
+                                                textInputAction:
+                                                    TextInputAction.newline,
+                                                style: const TextStyle(
+                                                  color: _kInk,
+                                                  fontSize: 15,
+                                                  height: 1.4,
+                                                ),
+                                                decoration: const InputDecoration(
+                                                  hintText:
+                                                      'Type or speak your request…',
+                                                  hintStyle: TextStyle(
+                                                    color: _kMuted,
+                                                    fontSize: 15,
+                                                  ),
+                                                  border: InputBorder.none,
+                                                  contentPadding:
+                                                      EdgeInsets.zero,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+
+                                          // Mic — voice input, left of send
+                                          _MicButton(
+                                            isRecording: _voice.isRecording,
+                                            isLongDictating:
+                                                _voice.isLongDictating,
+                                            onPressed: _toggleVoice,
+                                          ),
+                                          const SizedBox(width: 4),
+
+                                          // Send — living-saffron squircle,
+                                          // rightmost final action. Gradient
+                                          // + soft glow when armed; matches
+                                          // the iOS superellipse feel.
+                                          GestureDetector(
+                                            onTap: canSend
+                                                ? _sendRequest
+                                                : null,
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                milliseconds: 200,
+                                              ),
+                                              width: 46,
+                                              height: 46,
+                                              decoration: BoxDecoration(
+                                                gradient: canSend
+                                                    ? AppGradients.saffronAction
+                                                    : null,
+                                                color: canSend
+                                                    ? null
+                                                    : AppColors.saffronTint(
+                                                        0.25,
+                                                      ),
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                boxShadow: canSend
+                                                    ? [
+                                                        BoxShadow(
+                                                          color: AppColors
+                                                              .saffron
+                                                              .withValues(
+                                                                alpha: 0.35,
+                                                              ),
+                                                          blurRadius: 14,
+                                                          offset: const Offset(
+                                                            0,
+                                                            4,
+                                                          ),
+                                                        ),
+                                                      ]
+                                                    : null,
+                                              ),
+                                              child: const Icon(
+                                                Icons.arrow_upward_rounded,
+                                                color: Colors.white,
+                                                size: 22,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    const SizedBox(height: 14),
+
+                                    // ── Trust strip ───────────────────────────────────
+                                    // Row > Expanded forces tight width onto the Wrap so it
+                                    // always knows when to wrap — Column(center) alone gives
+                                    // Wrap unbounded width which causes the overflow on narrow
+                                    // Android screens.
+                                    const Row(
+                                      children: [
+                                        Expanded(
+                                          child: Wrap(
+                                            alignment: WrapAlignment.center,
+                                            spacing: 14,
+                                            runSpacing: 6,
+                                            children: [
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.verified_outlined,
+                                                    size: 12,
+                                                    color: _kMuted,
+                                                  ),
+                                                  SizedBox(width: 3),
+                                                  Text(
+                                                    'Verified ZanCrew',
+                                                    style: TextStyle(
+                                                      fontSize: 11.5,
+                                                      color: _kMuted,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.lock_outline_rounded,
+                                                    size: 12,
+                                                    color: _kMuted,
+                                                  ),
+                                                  SizedBox(width: 3),
+                                                  Text(
+                                                    'Secure payment',
+                                                    style: TextStyle(
+                                                      fontSize: 11.5,
+                                                      color: _kMuted,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.my_location_rounded,
+                                                    size: 12,
+                                                    color: _kMuted,
+                                                  ),
+                                                  SizedBox(width: 3),
+                                                  Text(
+                                                    'Live tracking',
+                                                    style: TextStyle(
+                                                      fontSize: 11.5,
+                                                      color: _kMuted,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ],
                                     ),
-                                    borderRadius: BorderRadius.circular(26),
-                                    border: Border.all(
-                                      color: _kInk.withValues(alpha: 0.08),
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(
-                                          alpha:
-                                              0.08 + (_glowAnim.value * 0.04),
-                                        ),
-                                        blurRadius: 36 + (10 * _glowAnim.value),
-                                        spreadRadius: 0,
-                                        offset: Offset(
-                                          0,
-                                          12 + (3 * _glowAnim.value),
-                                        ),
-                                      ),
-                                      // Warm ambient glow — premium feel without blur
-                                      BoxShadow(
-                                        color: _kSaffron.withValues(
-                                          alpha:
-                                              0.04 + (_glowAnim.value * 0.03),
-                                        ),
-                                        blurRadius: 48,
-                                        spreadRadius: 0,
-                                        offset: const Offset(0, 10),
-                                      ),
-                                    ],
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 18,
-                                    vertical: 14,
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Expanded(
-                                        child: ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            minHeight: 100,
-                                            maxHeight: 200,
-                                          ),
-                                          child: TextField(
-                                            controller: _controller,
-                                            onChanged: (_) => setState(() {}),
-                                            onSubmitted: (_) =>
-                                                canSend ? _sendRequest() : null,
-                                            minLines: 4,
-                                            maxLines: 8,
-                                            keyboardType:
-                                                TextInputType.multiline,
-                                            textInputAction:
-                                                TextInputAction.newline,
-                                            style: const TextStyle(
-                                              color: _kInk,
-                                              fontSize: 15,
-                                              height: 1.4,
-                                            ),
-                                            decoration: const InputDecoration(
-                                              hintText:
-                                                  'Type or speak your request…',
-                                              hintStyle: TextStyle(
-                                                color: _kMuted,
-                                                fontSize: 15,
-                                              ),
-                                              border: InputBorder.none,
-                                              contentPadding: EdgeInsets.zero,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
 
-                                      // Mic — voice input, left of send
-                                      _MicButton(
-                                        isRecording: _voice.isRecording,
-                                        isLongDictating: _voice.isLongDictating,
-                                        onPressed: _toggleVoice,
-                                      ),
-                                      const SizedBox(width: 4),
-
-                                      // Send — saffron circle, rightmost final action
-                                      GestureDetector(
-                                        onTap: canSend ? _sendRequest : null,
+                                    // ── Policy message ────────────────────────────────
+                                    if (_policyMessage != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 12),
                                         child: Container(
-                                          width: 44,
-                                          height: 44,
+                                          padding: const EdgeInsets.all(12),
                                           decoration: BoxDecoration(
-                                            color: canSend
-                                                ? _kSaffron
-                                                : _kSaffron.withValues(
-                                                    alpha: 0.3,
+                                            color: Colors.red.withValues(
+                                              alpha: 0.08,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.red.withValues(
+                                                alpha: 0.3,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const Icon(
+                                                Icons.info_outline_rounded,
+                                                color: Colors.red,
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  _policyMessage!,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    color: Colors.red,
+                                                    height: 1.3,
                                                   ),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.arrow_upward_rounded,
-                                            color: Colors.white,
-                                            size: 22,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
 
-                            const SizedBox(height: 14),
+                                    if (_isLoading)
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 10),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.6,
+                                          color: _kSaffron,
+                                        ),
+                                      ),
 
-                            // ── Trust strip ───────────────────────────────────
-                            // Row > Expanded forces tight width onto the Wrap so it
-                            // always knows when to wrap — Column(center) alone gives
-                            // Wrap unbounded width which causes the overflow on narrow
-                            // Android screens.
-                            const Row(
-                              children: [
-                                Expanded(
-                                  child: Wrap(
-                                    alignment: WrapAlignment.center,
-                                    spacing: 14,
-                                    runSpacing: 6,
-                                    children: [
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.verified_outlined,
-                                            size: 12,
-                                            color: _kMuted,
-                                          ),
-                                          SizedBox(width: 3),
-                                          Text(
-                                            'Verified ZanCrew',
-                                            style: TextStyle(
-                                              fontSize: 11.5,
-                                              color: _kMuted,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.lock_outline_rounded,
-                                            size: 12,
-                                            color: _kMuted,
-                                          ),
-                                          SizedBox(width: 3),
-                                          Text(
-                                            'Secure payment',
-                                            style: TextStyle(
-                                              fontSize: 11.5,
-                                              color: _kMuted,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.my_location_rounded,
-                                            size: 12,
-                                            color: _kMuted,
-                                          ),
-                                          SizedBox(width: 3),
-                                          Text(
-                                            'Live tracking',
-                                            style: TextStyle(
-                                              fontSize: 11.5,
-                                              color: _kMuted,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            // ── Policy message ────────────────────────────────
-                            if (_policyMessage != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.red.withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Icon(
-                                        Icons.info_outline_rounded,
-                                        color: Colors.red,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
+                                    if (_response.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8),
                                         child: Text(
-                                          _policyMessage!,
+                                          _response,
                                           style: const TextStyle(
-                                            fontSize: 14,
                                             color: Colors.red,
-                                            height: 1.3,
                                           ),
+                                          textAlign: TextAlign.center,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ),
+                                  ], // Expanded > Column children
+                                ), // Column
+                              ), // Padding
+                            ), // Expanded
+                            // ── Customer active task card ─────────────────────────
+                            if (!isTyping &&
+                                !keyboardOpen &&
+                                _customerActiveTaskId != null) ...[
+                              const SizedBox(height: 10),
+                              _CustomerActiveTaskBanner(
+                                taskTitle: _customerActiveTaskTitle,
+                                rawStatus: _customerActiveTaskStatus,
+                                onTap: () async {
+                                  // Don't stack a second copy if it's already open.
+                                  if (TrackJobScreen.isOpenForJob(
+                                    _customerActiveTaskId,
+                                  )) {
+                                    return;
+                                  }
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => TrackJobScreen(
+                                        taskTitle:
+                                            _customerActiveTaskTitle ?? 'Task',
+                                        userLocation:
+                                            _customerActiveTaskLocation ?? '',
+                                        jobId: _customerActiveTaskId!,
+                                      ),
+                                    ),
+                                  );
+                                  if (mounted) _checkCustomerActiveTask();
+                                },
                               ),
+                            ],
+                            // ── Active job card (crew) ─────────────────────────────
+                            if (!isTyping &&
+                                !keyboardOpen &&
+                                _activeJobId != null) ...[
+                              const SizedBox(height: 8),
+                              _ActiveJobBanner(
+                                taskTitle: _activeJobTitle,
+                                rawStatus: _activeJobStatus,
+                                onTap: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          CrewJobDetail(jobId: _activeJobId!),
+                                    ),
+                                  );
+                                  _checkActiveJob();
+                                },
+                              ),
+                            ],
+                            // ── Happening near you — hidden while any active card shows
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              child:
+                                  isTyping ||
+                                      keyboardOpen ||
+                                      _customerActiveTaskId != null ||
+                                      _activeJobId != null
+                                  ? const SizedBox.shrink()
+                                  : ValueListenableBuilder<String>(
+                                      key: const ValueKey('happening'),
+                                      valueListenable: _typed,
+                                      builder: (context, typed, _) =>
+                                          _HappeningCard(
+                                            example: _examples[_exIndex],
+                                            typedText: typed,
+                                            onTap: _onExampleTap,
+                                          ),
+                                    ),
+                            ),
 
-                            if (_isLoading)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 10),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.6,
-                                  color: _kSaffron,
-                                ),
-                              ),
-
-                            if (_response.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  _response,
-                                  style: const TextStyle(color: Colors.red),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                          ], // Expanded > Column children
+                            const SizedBox(height: 16),
+                          ], // Column children
                         ), // Column
-                      ), // Padding
-                    ), // Expanded
-                    // ── Customer active task card ─────────────────────────
-                    if (!isTyping &&
-                        !keyboardOpen &&
-                        _customerActiveTaskId != null) ...[
-                      const SizedBox(height: 10),
-                      _CustomerActiveTaskBanner(
-                        taskTitle: _customerActiveTaskTitle,
-                        rawStatus: _customerActiveTaskStatus,
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => TrackJobScreen(
-                                taskTitle: _customerActiveTaskTitle ?? 'Task',
-                                userLocation: _customerActiveTaskLocation ?? '',
-                                jobId: _customerActiveTaskId!,
-                              ),
-                            ),
-                          );
-                          if (mounted) _checkCustomerActiveTask();
-                        },
-                      ),
-                    ],
-                    // ── Active job card (crew) ─────────────────────────────
-                    if (!isTyping && !keyboardOpen && _activeJobId != null) ...[
-                      const SizedBox(height: 8),
-                      _ActiveJobBanner(
-                        taskTitle: _activeJobTitle,
-                        rawStatus: _activeJobStatus,
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  CrewJobDetail(jobId: _activeJobId!),
-                            ),
-                          );
-                          _checkActiveJob();
-                        },
-                      ),
-                    ],
-                    // ── Happening near you — hidden while any active card shows
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      child:
-                          isTyping ||
-                              keyboardOpen ||
-                              _customerActiveTaskId != null ||
-                              _activeJobId != null
-                          ? const SizedBox.shrink()
-                          : _HappeningCard(
-                              key: const ValueKey('happening'),
-                              example: _examples[_exIndex],
-                              typedText: _typed,
-                              onTap: _onExampleTap,
-                            ),
-                    ),
-
-                    const SizedBox(height: 16),
-                  ], // Column children
-                ), // Column
+                      ), // IntrinsicHeight
+                    ), // ConstrainedBox
+                  ), // SingleChildScrollView
+                ), // LayoutBuilder
                 // ── Customer / Work segmented pill (top-left) ─────────────
                 Positioned(
                   top: 0,
@@ -1207,9 +1402,9 @@ class _HomeScreenState extends State<HomeScreen>
                     child: Container(
                       height: 36,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: _kInk.withValues(alpha: 0.1)),
+                        color: AppColors.surface,
+                        borderRadius: AppRadii.pillR,
+                        border: Border.all(color: AppColors.hairline(0.1)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1250,7 +1445,7 @@ class _HomeScreenState extends State<HomeScreen>
                                       height: 6,
                                       margin: const EdgeInsets.only(right: 5),
                                       decoration: const BoxDecoration(
-                                        color: Color(0xFF4ADE80),
+                                        color: AppColors.success,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
@@ -1466,14 +1661,14 @@ class _HappeningCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: const BoxDecoration(
-                    color: Color(0xFFF3E2D2),
+                    color: AppColors.parcelTint,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: Text(
                       example.name[0],
                       style: const TextStyle(
-                        color: Color(0xFF6B4226),
+                        color: AppColors.parcelInk,
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
@@ -1502,7 +1697,7 @@ class _HappeningCard extends StatelessWidget {
                             width: 6,
                             height: 6,
                             decoration: const BoxDecoration(
-                              color: Color(0xFF4ADE80),
+                              color: AppColors.success,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -1606,9 +1801,9 @@ class _ActiveJobBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFEFBF6),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _kInk.withValues(alpha: 0.1)),
+          color: AppColors.surfaceWarm,
+          borderRadius: AppRadii.bannerR,
+          border: Border.all(color: AppColors.hairline(0.1)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
@@ -1619,7 +1814,7 @@ class _ActiveJobBanner extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const _PulsingDot(color: Color(0xFF4ADE80)),
+            const _PulsingDot(color: AppColors.success),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -1669,13 +1864,13 @@ class _ActiveJobBanner extends StatelessWidget {
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4ADE80).withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(999),
+                  color: AppColors.successTint(0.18),
+                  borderRadius: AppRadii.pillR,
                 ),
                 child: Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xFF16A34A),
+                    color: AppColors.successInk,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.1,
@@ -1721,6 +1916,8 @@ class _CustomerActiveTaskBanner extends StatelessWidget {
 
   String get _statusText {
     switch (rawStatus) {
+      case 'searching':
+        return 'Finding a ZanCrew partner';
       case 'assigned':
         return 'ZanCrew accepted your task';
       case 'travelling':
@@ -1743,8 +1940,8 @@ class _CustomerActiveTaskBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFBF3),
-          borderRadius: BorderRadius.circular(20),
+          color: AppColors.surfaceWarmAlt,
+          borderRadius: AppRadii.bannerR,
           border: Border.all(
             color: _kSaffron.withValues(alpha: 0.65),
             width: 1.5,

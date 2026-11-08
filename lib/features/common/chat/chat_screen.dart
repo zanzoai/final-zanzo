@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zanzo_frontend/core/services/messages_api.dart';
+import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/core/services/task_chat_ws_service.dart';
+import 'package:zanzo_frontend/core/notifications/push_router.dart';
+import 'package:zanzo_frontend/core/notifications/chat_unread_store.dart';
 
 class ChatScreen extends StatefulWidget {
   final String jobId;
@@ -37,6 +40,11 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    // Tell the push router this task's chat is on screen so it suppresses a
+    // duplicate in-app banner for `new_message` pushes we already show live.
+    PushRouter.currentChatTaskId = widget.jobId;
+    // Opening the conversation clears its unread badge everywhere.
+    ChatUnreadStore.instance.clear(widget.jobId);
     _bootstrap();
   }
 
@@ -223,6 +231,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    if (PushRouter.currentChatTaskId == widget.jobId) {
+      PushRouter.currentChatTaskId = null;
+    }
     _wsChat.removeListener(_onWsUpdate);
     _wsChat.dispose();
     _input.dispose();
@@ -243,7 +254,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const SkeletonChat()
                 : _buildMessages(),
           ),
           _buildInput(),
@@ -303,7 +314,7 @@ class _ChatScreenState extends State<ChatScreen> {
   // 8) IMAGE BUBBLE + optional caption
   // ---------------------------------------------------------------------------
   Widget _buildImageBubble(ChatMessage m) {
-    final url = m.publicImageUrl();
+    final url = m.displayImageUrl();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/zancrew_api.dart';
+import 'package:zanzo_frontend/core/utils/market.dart';
 
 class ZanCrewReview extends StatefulWidget {
   final String userId;
@@ -177,7 +178,7 @@ class _ZanCrewReviewState extends State<ZanCrewReview> {
                         value: buckets.isEmpty ? '—' : buckets.join(', '),
                         multiline: true,
                       ),
-                      _RowItem(label: 'Radius', value: '$radiusKm km'),
+                      _RowItem(label: 'Radius', value: Market.radius(radiusKm)),
                     ],
                   ),
 

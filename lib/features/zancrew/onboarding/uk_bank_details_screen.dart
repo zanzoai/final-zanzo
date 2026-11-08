@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/services/uk_provider_api.dart';
+import '../../../core/widgets/skeleton.dart';
 
 class UkBankDetailsScreen extends StatefulWidget {
   const UkBankDetailsScreen({super.key});
@@ -134,7 +135,7 @@ class _UkBankDetailsScreenState extends State<UkBankDetailsScreen> {
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _accent))
+          ? const SkeletonDetail()
           : SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),

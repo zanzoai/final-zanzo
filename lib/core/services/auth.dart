@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:zanzo_frontend/core/services/api_service.dart';
+import 'package:zanzo_frontend/core/services/token_store.dart';
 import 'package:zanzo_frontend/features/user/screens/profile_screen.dart';
 import 'package:zanzo_frontend/features/user/widgets/login_prompt_dialog.dart';
 
@@ -23,6 +24,7 @@ class Auth {
   /// Sign out — invalidates the refresh token on the server then clears all local data.
   static Future<void> signOut() async {
     await ApiService.logout();
+    await TokenStore.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
