@@ -20,6 +20,7 @@ import '../../../core/widgets/skeleton.dart';
 import '../dashboard/zancrew_dashboard.dart';
 import '../onboarding/uk_pending_screen.dart';
 import '../onboarding/uk_rejected_screen.dart';
+import '../onboarding/uk_resubmit_docs_screen.dart';
 import '../onboarding/uk_work_status_screen.dart';
 import '../onboarding/zancrew_onboarding.dart';
 
@@ -159,6 +160,19 @@ class _ZanCrewGatewayState extends State<ZanCrewGateway> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const UkPendingScreen()),
+        );
+        return;
+      }
+
+      if (providerStatus == 'resubmit_docs') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => UkResubmitDocsScreen(
+              adminNotes: ukStatus['admin_notes'] as String?,
+              rejectionReason: ukStatus['rejection_reason'] as String?,
+            ),
+          ),
         );
         return;
       }

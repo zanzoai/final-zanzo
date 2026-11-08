@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/uk_provider_api.dart';
 import '../dashboard/zancrew_dashboard.dart';
 import 'uk_rejected_screen.dart';
+import 'uk_resubmit_docs_screen.dart';
 
 class UkPendingScreen extends StatefulWidget {
   const UkPendingScreen({super.key});
@@ -59,6 +60,16 @@ class _UkPendingScreenState extends State<UkPendingScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const ZanCrewDashboard()),
+        );
+      } else if (providerStatus == 'resubmit_docs') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => UkResubmitDocsScreen(
+              adminNotes: result['admin_notes'] as String?,
+              rejectionReason: result['rejection_reason'] as String?,
+            ),
+          ),
         );
       } else if (providerStatus == 'rejected' ||
           providerStatus == 'suspended') {

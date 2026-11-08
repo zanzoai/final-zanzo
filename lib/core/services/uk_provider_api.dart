@@ -28,6 +28,9 @@ class UkProviderApi {
     String? addressOrPostcode,
     String? shareCode,
     required bool termsAgreed,
+    // Phase 4: NI number collected for all workers
+    String? niNumber,
+    // Student-visa fields
     String? universityName,
     String? courseName,
     String? courseLevel,
@@ -45,6 +48,9 @@ class UkProviderApi {
     if (phone != null) body['phone'] = phone;
     if (addressOrPostcode != null) body['address_or_postcode'] = addressOrPostcode;
     if (shareCode != null) body['share_code'] = shareCode;
+    if (niNumber != null && niNumber.isNotEmpty) {
+      body['ni_number'] = niNumber;
+    }
     if (universityName != null) body['university_name'] = universityName;
     if (courseName != null) body['course_name'] = courseName;
     if (courseLevel != null) body['course_level'] = courseLevel;

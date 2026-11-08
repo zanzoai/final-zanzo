@@ -57,6 +57,8 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
   final _visaExpiryCtrl = TextEditingController();
   final _otherEmploymentCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  // Phase 4: NI number collected for all workers
+  final _niCtrl = TextEditingController();
 
   String? _courseLevel;
 
@@ -97,6 +99,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
     _visaExpiryCtrl.dispose();
     _otherEmploymentCtrl.dispose();
     _notesCtrl.dispose();
+    _niCtrl.dispose();
     super.dispose();
   }
 
@@ -152,6 +155,7 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
             ? _shareCodeCtrl.text.trim()
             : null,
         termsAgreed: true,
+        niNumber: _niCtrl.text.trim().isNotEmpty ? _niCtrl.text.trim() : null,
         universityName: _universityCtrl.text.trim().isNotEmpty
             ? _universityCtrl.text.trim()
             : null,
@@ -837,6 +841,18 @@ class _UkApplyScreenState extends State<UkApplyScreen> {
                   },
                 ),
               ],
+
+              // NI number (optional, all workers — PAYE payroll processing)
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _niCtrl,
+                decoration: _dec(
+                  'National Insurance Number (optional)',
+                  hint: 'e.g. AB 12 34 56 C',
+                  helperText: 'Helps us process PAYE payroll correctly',
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
 
               // Student-specific fields
               if (widget.workStatus == 'student_visa') ...[
