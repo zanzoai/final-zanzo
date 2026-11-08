@@ -96,6 +96,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
   double? _pricePerBlock;
   // Fallback per-block rate for India only (flat rate, matches backend default).
   static const _fallbackPerBlockInr = 150.0;
+  // UK standard bookings are capped at 4 hours; India keeps the 8-hour max.
+  static const _ukMaxDurationHours = 4.0;
+  static const _indiaMaxDurationHours = 8.0;
   // UK tiered pricing fallback (pence) — mirrors backend uk_pricing settings defaults.
   // Block 1 = £17.99, block 2 adds £10.00, each subsequent block adds £11.00.
   static const _ukTier1 = 1799; // pence
@@ -1990,19 +1993,23 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
                           value: _durationLabel(),
                           onMinus: _durationHours > 0.5
                               ? () {
+                                  final max = _currencyCode == 'GBP'
+                                      ? _ukMaxDurationHours
+                                      : _indiaMaxDurationHours;
                                   setState(() {
                                     _durationHours = (_durationHours - 0.5)
-                                        .clamp(0.5, 8.0);
+                                        .clamp(0.5, max);
                                   });
                                   _fetchEstimatedCost();
                                 }
                               : null,
                           onPlus: () {
+                            final max = _currencyCode == 'GBP'
+                                ? _ukMaxDurationHours
+                                : _indiaMaxDurationHours;
                             setState(() {
-                              _durationHours = (_durationHours + 0.5).clamp(
-                                0.5,
-                                8.0,
-                              );
+                              _durationHours =
+                                  (_durationHours + 0.5).clamp(0.5, max);
                             });
                             _fetchEstimatedCost();
                           },
@@ -2011,7 +2018,9 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
                         Padding(
                           padding: const EdgeInsets.only(left: 30),
                           child: Text(
-                            "Minimum job time is 30 minutes.",
+                            _currencyCode == 'GBP'
+                                ? "30 minutes – 4 hours (30-min steps)"
+                                : "Minimum job time is 30 minutes.",
                             style: TextStyle(
                               fontSize: 11.5,
                               color: _muted,
