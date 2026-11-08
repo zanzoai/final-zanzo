@@ -126,14 +126,24 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
   }
 
   // --- Duration & people ---
-  int? get _durationHours {
+  /// Human-readable duration label: "30 min", "1h", "1h 30 min".
+  /// Handles fractional hours (e.g. 0.5 → "30 min") — toInt() would give "0h".
+  String get _durationLabel {
     final v = _job?['duration_hours'] ?? _offer['duration_hours'];
-    if (v == null) return null;
+    if (v == null) return '';
+    final double hours;
     try {
-      return (v is num) ? v.toInt() : int.parse(v.toString());
+      hours = (v is num) ? v.toDouble() : double.parse(v.toString());
     } catch (_) {
-      return null;
+      return '';
     }
+    if (hours <= 0) return '';
+    final totalMins = (hours * 60).round();
+    final h = totalMins ~/ 60;
+    final m = totalMins % 60;
+    if (h == 0) return '$m min';
+    if (m == 0) return '${h}h';
+    return '${h}h $m min';
   }
 
   int? get _peopleRequired {
@@ -195,12 +205,12 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
     }
   }
 
-  /// Basic pay estimate label. Excludes holiday pay and net pay (pending JMK confirmation).
+  /// Supplementary PAYE note shown below the wage headline. Does not repeat
+  /// the amount — the headline price_estimate already shows the PAYE wage.
   String get _payeWageLabel {
     final pence = _payeEstimatedWagePence;
     if (pence == null || pence <= 0) return '';
-    final pounds = pence / 100.0;
-    return '~£${pounds.toStringAsFixed(2)} basic pay only (holiday pay pending JMK)';
+    return 'Basic pay estimate — holiday pay processed separately';
   }
 
   // -----------------------------------------------------------------------------
@@ -793,10 +803,10 @@ class _CrewOfferDetailState extends State<CrewOfferDetail> {
                                 icon: Icons.place_outlined,
                                 text: '$_distanceLabel away',
                               ),
-                            if (_durationHours != null)
+                            if (_durationLabel.isNotEmpty)
                               _pill(
                                 icon: Icons.timer_outlined,
-                                text: '${_durationHours}h',
+                                text: _durationLabel,
                               ),
                             if (_peopleRequired != null)
                               _pill(
