@@ -674,7 +674,11 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       String? detail;
       try {
         final d = jsonDecode(jobRes.body)['detail'];
-        if (d is String && d.isNotEmpty && d.length < 140) detail = d;
+        if (d is String && d.isNotEmpty && d.length < 140) {
+          detail = d;
+        } else if (d is Map && d['message'] is String) {
+          detail = d['message'] as String;
+        }
       } catch (_) {}
       throw Exception(
         detail ?? "Couldn't create the task (${jobRes.statusCode}). Please try again.",
@@ -743,7 +747,18 @@ class _ReviewTaskScreenState extends State<ReviewTaskScreen> {
       );
 
       if (payRes.statusCode < 200 || payRes.statusCode >= 300) {
-        throw Exception("Create intent failed: ${payRes.body}");
+        String? msg;
+        try {
+          final d = json.decode(payRes.body)['detail'];
+          if (d is Map && d['message'] is String) {
+            msg = d['message'] as String;
+          } else if (d is String && d.isNotEmpty && d.length < 140) {
+            msg = d;
+          }
+        } catch (_) {}
+        throw Exception(
+          msg ?? "Payment could not be started (${payRes.statusCode}). Please try again.",
+        );
       }
 
       final payData = json.decode(payRes.body);

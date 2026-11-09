@@ -262,8 +262,7 @@ class ApiService {
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
-        'POST /tasks/$jobId/verify-start-otp failed: '
-        '${res.statusCode} ${_truncate(res.body)}',
+        'verify-start-otp: ${res.statusCode}: ${_truncate(res.body)}',
       );
     }
   }

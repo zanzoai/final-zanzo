@@ -120,7 +120,11 @@ class PushRouter {
       case 'task_status_update':
         // Customer: a task moved on (assigned, arrived, completed …). The live
         // screens already update over the WebSocket; a tap opens the task.
-        if (opened) _openTask(data);
+        _handleTaskStatusUpdate(data, opened: opened);
+        break;
+      case 'support_reply':
+        // Customer: admin replied to their support request.
+        _handleSupportReply(data, opened: opened);
         break;
       case 'new_offer':
         // Crew: a new job offer nearby. A tap opens the offer.
@@ -159,6 +163,53 @@ class PushRouter {
         'job_id': (data['task_id'] ?? '').toString(),
       }),
     ));
+  }
+
+  void _handleTaskStatusUpdate(Map<String, dynamic> data, {required bool opened}) {
+    if (opened) {
+      _openTask(data);
+      return;
+    }
+    final status = (data['status'] ?? '').toString();
+    if (status == 'cancelled' || status == 'refunded') {
+      final ctx = DeepLinkService.navigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      final msg = status == 'refunded'
+          ? 'A refund has been issued to your original payment method.'
+          : 'Your task has been cancelled.';
+      ScaffoldMessenger.maybeOf(ctx)
+        ?..clearSnackBars()
+        ..showSnackBar(SnackBar(
+          content: Text(msg),
+          duration: const Duration(seconds: 6),
+          behavior: SnackBarBehavior.floating,
+        ));
+    }
+  }
+
+  void _handleSupportReply(Map<String, dynamic> data, {required bool opened}) {
+    final taskId = (data['task_id'] ?? '').toString().trim();
+    if (opened) {
+      if (taskId.isNotEmpty) {
+        _openTask(data);
+      } else {
+        final nav = DeepLinkService.navigatorKey.currentState;
+        nav?.popUntil((route) => route.isFirst);
+      }
+      return;
+    }
+    final ctx = DeepLinkService.navigatorKey.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    ScaffoldMessenger.maybeOf(ctx)
+      ?..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: const Text('Support reply received. Tap to view.'),
+        duration: const Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+        action: taskId.isNotEmpty
+            ? SnackBarAction(label: 'View', onPressed: () => _openTask(data))
+            : null,
+      ));
   }
 
   void _handleTaskCancelled({required bool opened}) {
