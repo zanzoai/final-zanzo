@@ -505,6 +505,19 @@ class _TrackJobScreenState extends State<TrackJobScreen> {
       _maybePromptReview();
     }
 
+    // Notify the customer when a live task is cancelled or refunded mid-flow.
+    if (prevStatus.isNotEmpty && prevStatus != status &&
+        (status == 'cancelled' || status == 'refunded')) {
+      final msg = status == 'refunded'
+          ? 'A refund has been issued to your original payment method.'
+          : 'Your task has been cancelled. Any payment hold has been released.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        duration: const Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+
     _syncLiveActivity(status);
   }
 

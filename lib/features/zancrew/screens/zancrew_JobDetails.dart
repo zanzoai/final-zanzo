@@ -715,8 +715,13 @@ class _CrewJobDetailState extends State<CrewJobDetail> {
             _recomputeCountdown(); // start-OTP verified → begin the countdown
           }
           return; // success → exit loop
-        } catch (_) {
-          errorText = "Wrong PIN, please try again";
+        } catch (e) {
+          final msg = e.toString();
+          final codeMatch = RegExp(r'verify-start-otp: (\d{3}):').firstMatch(msg);
+          final code = codeMatch != null ? int.tryParse(codeMatch.group(1)!) : null;
+          errorText = (code != null && code >= 500)
+              ? "Couldn't start the job right now — please try again."
+              : "Wrong PIN, please try again";
           controller.clear();
         } finally {
           if (mounted) setState(() => _posting = false);
