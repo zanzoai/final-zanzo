@@ -7,6 +7,7 @@ import 'package:zanzo_frontend/core/widgets/error_state.dart';
 import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/features/user/screens/review_task_screen.dart';
 import 'package:zanzo_frontend/features/user/screens/track_job_screen.dart';
+import 'package:zanzo_frontend/features/user/widgets/support_sheet.dart';
 import 'package:zanzo_frontend/core/utils/currency.dart';
 
 class JobHistoryScreen extends StatefulWidget {
@@ -628,6 +629,27 @@ class _JobHistoryScreenState extends State<JobHistoryScreen> {
                                         },
                                 ),
                         ),
+                        // Get Help — completed and cancelled bookings only
+                        if (_isCompletedStatus(statusRaw) && jobId.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 46,
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.help_outline_rounded, size: 18),
+                              label: const Text('Get Help'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _muted,
+                                side: const BorderSide(color: _line),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onPressed: () =>
+                                  openSupportSheet(context, taskId: jobId),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
