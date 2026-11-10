@@ -8,6 +8,7 @@ import 'package:zanzo_frontend/core/services/api_service.dart';
 import 'package:zanzo_frontend/core/widgets/error_state.dart';
 import 'package:zanzo_frontend/core/widgets/skeleton.dart';
 import 'package:zanzo_frontend/core/utils/currency.dart';
+import 'package:zanzo_frontend/features/user/widgets/support_sheet.dart';
 
 const _kBg = Color(0xFFFCFAF6);
 const _kInk = Color(0xFF26211C);
@@ -220,6 +221,7 @@ class _CancelledRefundsScreenState extends State<CancelledRefundsScreen> {
     final s = _statusStyle(j);
     final amountStr = _amount(j);
     final payLabel = _paymentLabel(j['payment_status'] as String?);
+    final jobId = (j['id'] as String? ?? '').trim();
 
     return Container(
       decoration: BoxDecoration(
@@ -291,6 +293,25 @@ class _CancelledRefundsScreenState extends State<CancelledRefundsScreen> {
             Text(
               payLabel,
               style: const TextStyle(fontSize: 13, color: _kMuted, height: 1.4),
+            ),
+          ],
+          if (jobId.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 42,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.help_outline_rounded, size: 17),
+                label: const Text('Get Help'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _kMuted,
+                  side: const BorderSide(color: _kLine),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () => openSupportSheet(context, taskId: jobId),
+              ),
             ),
           ],
         ],
