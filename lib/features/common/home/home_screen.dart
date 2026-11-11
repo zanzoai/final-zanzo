@@ -684,7 +684,7 @@ class _HomeScreenState extends State<HomeScreen>
 
         pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
-        ).timeout(const Duration(seconds: 8));
+        ).timeout(const Duration(seconds: 15));
       } catch (locErr) {
         dlog('[Home] Location error: $locErr');
 
@@ -700,14 +700,26 @@ class _HomeScreenState extends State<HomeScreen>
           );
         } else {
           if (!mounted) return;
+          // Distinguish the three failure modes so the user gets actionable
+          // guidance. Samsung cold GPS routinely exceeds 8 s — the previous
+          // single-message catch showed a misleading "enable permission" snackbar
+          // for what was actually a GPS timeout.
+          final String snackMsg;
+          if (locErr is TimeoutException) {
+            snackMsg =
+                'Getting your location is taking too long. Please try again.';
+          } else if (locErr.toString().contains('location_service_disabled')) {
+            snackMsg = 'Please turn on location services and try again.';
+          } else {
+            snackMsg =
+                'Location is needed to find nearby ZanCrew. '
+                'Please enable location permission and try again.';
+          }
           setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Location is needed to find nearby ZanCrew. '
-                'Please enable location permission and try again.',
-              ),
-              duration: Duration(seconds: 4),
+            SnackBar(
+              content: Text(snackMsg),
+              duration: const Duration(seconds: 4),
             ),
           );
           return;
