@@ -650,6 +650,22 @@ class _HomeScreenState extends State<HomeScreen>
       _policyMessage = null;
     });
 
+    // ── Maintenance pre-check ─────────────────────────────────────────────
+    // Fetch before the location guard so the user sees the maintenance message
+    // rather than a location-permission error when bookings are closed.
+    // Silently skipped on network failure — the server gate is the authority.
+    final publicCfg = await ApiService.fetchPublicConfig();
+    if (publicCfg != null && publicCfg['maintenance_mode'] == true) {
+      if (!mounted) return;
+      final maintenanceMsg = publicCfg['maintenance_message']?.toString() ??
+          "We're doing some maintenance. Please check back soon.";
+      setState(() {
+        _policyMessage = maintenanceMsg;
+        _isLoading = false;
+      });
+      return;
+    }
+
     try {
       // ── Location guard ────────────────────────────────────────────────────
       Position? pos;
@@ -739,7 +755,10 @@ class _HomeScreenState extends State<HomeScreen>
             data['user_message']?.toString() ??
             "We can't help with that request.";
 
-        if (type == 'adult') {
+        if (type == 'maintenance') {
+          // Maintenance gate fired server-side (race with pre-check or direct call)
+          // — msg is already the backend's maintenance_message.
+        } else if (type == 'adult') {
           msg = "We can't assist with adult, intimate, or inappropriate tasks.";
         } else if (type == 'illegal') {
           msg =

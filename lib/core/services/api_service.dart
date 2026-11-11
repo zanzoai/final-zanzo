@@ -117,6 +117,24 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // PUBLIC CONFIG  (unauthenticated — used for maintenance-mode pre-check)
+  // ---------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>?> fetchPublicConfig() async {
+    final url = _u('/public/config');
+    try {
+      final res = await httpClient
+          .get(url, headers: jsonHeaders)
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        return body is Map<String, dynamic> ? body : null;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
   // PROCESS TASK
   // ---------------------------------------------------------------------------
 
@@ -155,11 +173,22 @@ class ApiService {
           '❌ HTTP ${res.statusCode}: ${_truncate(res.body)}',
         );
         String detail = 'HTTP ${res.statusCode}';
+        String errorType = 'server_error';
         try {
           final body = jsonDecode(res.body);
           if (body is Map) {
-            detail =
-                body['detail']?.toString() ??
+            final d = body['detail'];
+            if (d is Map && d['maintenance'] == true) {
+              // 503 maintenance gate — extract the user-facing message
+              return {
+                "ok": false,
+                "error_type": "maintenance",
+                "status_code": res.statusCode,
+                "user_message": d['message']?.toString() ??
+                    "We're doing some maintenance. Please check back soon.",
+              };
+            }
+            detail = d?.toString() ??
                 body['message']?.toString() ??
                 body['error']?.toString() ??
                 detail;
@@ -167,7 +196,7 @@ class ApiService {
         } catch (_) {}
         return {
           "ok": false,
-          "error_type": "server_error",
+          "error_type": errorType,
           "status_code": res.statusCode,
           "user_message": detail,
         };
